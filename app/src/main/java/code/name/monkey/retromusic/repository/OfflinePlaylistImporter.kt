@@ -69,7 +69,7 @@ class OfflinePlaylistImporter(
     /** Absolute paths of the entries, in order. */
     private fun parse(m3u: File): List<String> =
         m3u.readLines()
-            .map { it.trim().removePrefix("﻿") }
+            .map { it.trim().removePrefix("\uFEFF") }
             .filter { it.isNotEmpty() && !it.startsWith("#") }
             .map { entry ->
                 val file = File(entry.replace('\\', '/'))

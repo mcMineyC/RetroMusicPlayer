@@ -14,6 +14,7 @@ import code.name.monkey.retromusic.SPOTIFY_DEVICE_NAME
 import code.name.monkey.retromusic.SPOTIFY_NORMALISATION
 import code.name.monkey.retromusic.SPOTIFY_OGG_DUMP
 import code.name.monkey.retromusic.SPOTIFY_OGG_DUMP_DIR
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -30,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import mobilebind.CredentialCallback
 import mobilebind.EventCallback
 import mobilebind.Librespot
@@ -124,6 +126,10 @@ class LibrespotEngine(private val context: Context) {
     @Volatile
     private var librespot: Librespot? = null
 
+    /** Completed by `onCredentialsPersist` while [completeAuth] is waiting. */
+    @Volatile
+    private var pendingAuth: CompletableDeferred<Boolean>? = null
+
     private val _state = MutableStateFlow(SpotifyPlayerState())
     val state: StateFlow<SpotifyPlayerState> = _state.asStateFlow()
 
@@ -215,6 +221,7 @@ class LibrespotEngine(private val context: Context) {
                 val obj = JSONObject(credentialsJson)
                 writeCredentials(obj.optString("username"), obj.optString("data"))
                 _isLoggedIn.value = true
+                pendingAuth?.complete(true)
             }
         })
         instance.setOggDumpCallback(oggDumpCallback)
@@ -395,9 +402,35 @@ class LibrespotEngine(private val context: Context) {
     /** Returns the OAuth URL to open; the redirect goes to http://127.0.0.1. */
     suspend fun beginAuth(): String? = call { it.beginInteractiveAuth() }
 
-    /** Completes OAuth with the intercepted redirect URL. Returns true on success. */
-    suspend fun completeAuth(redirectUrl: String): Boolean =
-        call { it.completeInteractiveAuth(redirectUrl); true } == true
+    /**
+     * Completes OAuth with the intercepted redirect URL. Returns true once the new credentials
+     * are persisted, false on error or after [AUTH_TIMEOUT_MS].
+     *
+     * `completeInteractiveAuth` doesn't return on success: with zeroconf off, the bridge runs
+     * the new session's player loop on the calling thread until the player stops. So the call
+     * runs in [scope] (it *is* the player now, and must not be cancelled with the caller), and
+     * success is signalled by `onCredentialsPersist`, which fires before the loop starts.
+     */
+    suspend fun completeAuth(redirectUrl: String): Boolean {
+        val instance = librespot ?: ensureStarted() ?: return false
+        val result = CompletableDeferred<Boolean>()
+        pendingAuth = result
+        scope.launch {
+            try {
+                instance.completeInteractiveAuth(redirectUrl)
+                // Returned normally: the player stopped; credentials were persisted before that.
+                result.complete(true)
+            } catch (e: Exception) {
+                Log.w(TAG, "completeInteractiveAuth failed: ${e.message}")
+                result.complete(false)
+            }
+        }
+        return try {
+            withTimeoutOrNull(AUTH_TIMEOUT_MS) { result.await() } ?: false
+        } finally {
+            if (pendingAuth === result) pendingAuth = null
+        }
+    }
 
     suspend fun logout() {
         stop()
@@ -813,6 +846,7 @@ class LibrespotEngine(private val context: Context) {
         private const val CREDENTIALS_FILE = "spotify_credentials.json"
         private const val OGG_DUMP_DIR = "spotify"
         private const val DEFAULT_DEVICE_NAME = "Retro Music"
+        private const val AUTH_TIMEOUT_MS = 120_000L
         private const val RESTART_BASE_DELAY_MS = 2_000L
         private const val RESTART_MAX_DELAY_MS = 60_000L
     }

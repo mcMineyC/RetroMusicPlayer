@@ -174,7 +174,7 @@ class SpotifyConnectRouteProvider(
                 )
                 .addControlFilter(IntentFilter().apply { addCategory(CATEGORY_SPOTIFY_CONNECT) })
                 .setPlaybackType(MediaRouter.RouteInfo.PLAYBACK_TYPE_REMOTE)
-                .setDeviceType(deviceType(device.type))
+                .apply { deviceType(device.type)?.let(::setDeviceType) }
                 // The bridge can only set this device's volume, not another device's.
                 .setVolumeHandling(MediaRouter.RouteInfo.PLAYBACK_VOLUME_FIXED)
                 .setVolumeMax(100)
@@ -231,8 +231,11 @@ class SpotifyConnectRouteProvider(
         private const val STARTUP_RETRY_MS = 2_000L
         private const val TRANSFER_HOME_DELAY_MS = 750L
 
-        /** Maps the Connect `DeviceType` enum name to a MediaRouter device type for the icon. */
-        private fun deviceType(type: String): Int = when (type.uppercase()) {
+        /**
+         * Maps the Connect `DeviceType` enum name to a MediaRouter device type for the icon.
+         * Null leaves the builder's default (unknown; its constant is library-restricted).
+         */
+        private fun deviceType(type: String): Int? = when (type.uppercase()) {
             "TV", "STB", "CAST_VIDEO" -> MediaRouter.RouteInfo.DEVICE_TYPE_TV
             "SPEAKER", "AUDIO_DONGLE", "CAST_AUDIO", "HOME_THING" ->
                 MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER
@@ -243,7 +246,7 @@ class SpotifyConnectRouteProvider(
             "GAME_CONSOLE" -> MediaRouter.RouteInfo.DEVICE_TYPE_GAME_CONSOLE
             "AUTOMOBILE", "CAR_THING" -> MediaRouter.RouteInfo.DEVICE_TYPE_CAR
             "SMARTWATCH" -> MediaRouter.RouteInfo.DEVICE_TYPE_SMARTWATCH
-            else -> MediaRouter.RouteInfo.DEVICE_TYPE_UNKNOWN
+            else -> null
         }
     }
 }
