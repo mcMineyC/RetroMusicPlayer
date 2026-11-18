@@ -219,6 +219,17 @@
             android:name="androidx.mediarouter.media.MediaTransferReceiver"
             android:exported="true" />
 
+        <!-- Spotify Connect devices as media routes in Spotify mode. Exported so the system
+             media router can bind it; it only answers the MediaRouter2 (system-only) binding. -->
+        <service
+            android:name=".spotify.SpotifyConnectRouteProviderService"
+            android:exported="true"
+            android:label="@string/spotify_connect_route">
+            <intent-filter>
+                <action android:name="android.media.MediaRoute2ProviderService" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}"

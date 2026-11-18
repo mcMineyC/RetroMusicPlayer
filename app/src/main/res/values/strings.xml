@@ -554,6 +554,8 @@
     <string name="spotify_sync_step_albums">saved albums</string>
     <string name="spotify_sync_step_liked">Liked Songs</string>
     <string name="spotify_liked_songs">Liked Songs</string>
+    <string name="spotify_connect_route">Spotify Connect</string>
+    <string name="spotify_connect_route_playing">Spotify Connect · Playing</string>
     <string name="action_add_to_liked_songs">Add to Liked Songs</string>
     <plurals name="spotify_added_to_liked_songs">
         <item quantity="one">Added %d song to Liked Songs</item>

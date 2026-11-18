@@ -7,6 +7,7 @@ import androidx.mediarouter.media.MediaRouteSelector
 import androidx.mediarouter.media.MediaRouter
 import androidx.mediarouter.media.MediaRouterParams
 import code.name.monkey.retromusic.service.playback.Playback
+import code.name.monkey.retromusic.spotify.SpotifyConnectRouteProvider
 
 /**
  * Connects the app's media session to AndroidX MediaRouter so remote routes can be picked
@@ -82,9 +83,14 @@ class MediaRouteController(
             route.supportsControlCategory(MediaControlIntent.CATEGORY_REMOTE_PLAYBACK)
 
     companion object {
-        /** Routes that can play media remotely; used by the service and the Cast button. */
+        /**
+         * Routes that can play media remotely; used by the service and the Cast button. Also
+         * asks for Spotify Connect devices, which SpotifyConnectRouteProvider publishes (and
+         * handles itself) only in Spotify mode.
+         */
         val REMOTE_PLAYBACK_SELECTOR: MediaRouteSelector = MediaRouteSelector.Builder()
             .addControlCategory(MediaControlIntent.CATEGORY_REMOTE_PLAYBACK)
+            .addControlCategory(SpotifyConnectRouteProvider.CATEGORY_SPOTIFY_CONNECT)
             .build()
     }
 }

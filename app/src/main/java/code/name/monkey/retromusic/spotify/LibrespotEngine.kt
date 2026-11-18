@@ -533,7 +533,19 @@ class LibrespotEngine(private val context: Context) {
     suspend fun searchJson(query: String, limit: Long): String? =
         call { it.apiSearch(query, limit) }
 
-    suspend fun devicesJson(): String? = call { it.listDevicesJSON() }
+    /**
+     * Spotify Connect devices from the cluster state (local, no network). Unlike [call], this
+     * never starts librespot: returns null while it isn't running.
+     */
+    suspend fun devicesJson(): String? = withContext(Dispatchers.IO) {
+        val instance = librespot ?: return@withContext null
+        try {
+            instance.listDevicesJSON()
+        } catch (e: Exception) {
+            Log.w(TAG, "listDevicesJSON failed: ${e.message}")
+            null
+        }
+    }
 
     suspend fun transferPlayback(deviceId: String, play: Boolean): Boolean =
         call { it.transferPlayback(deviceId, play); true } == true
