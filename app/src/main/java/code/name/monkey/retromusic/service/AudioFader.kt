@@ -15,6 +15,9 @@ class AudioFader {
             context: Context,
             fadeInMp: MediaPlayer,
             fadeOutMp: MediaPlayer,
+            /* ReplayGain factors, read every frame so a late-loaded value still applies */
+            fadeInGain: () -> Float = { 1f },
+            fadeOutGain: () -> Float = { 1f },
             endAction: (animator: Animator) -> Unit, /* Code to run when Animator Ends*/
         ): Animator? {
             // Get Global animator scale
@@ -28,11 +31,11 @@ class AudioFader {
             return ValueAnimator.ofFloat(0f, 1f).apply {
                 this.duration = duration.toLong()
                 addUpdateListener { animation: ValueAnimator ->
-                    fadeInMp.setVolume(
-                        animation.animatedValue as Float, animation.animatedValue as Float
-                    )
-                    fadeOutMp.setVolume(1 - animation.animatedValue as Float,
-                        1 - animation.animatedValue as Float)
+                    val value = animation.animatedValue as Float
+                    val inVolume = value * fadeInGain()
+                    val outVolume = (1 - value) * fadeOutGain()
+                    fadeInMp.setVolume(inVolume, inVolume)
+                    fadeOutMp.setVolume(outVolume, outVolume)
                 }
                 doOnEnd {
                     endAction(it)

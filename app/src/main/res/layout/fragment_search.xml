@@ -128,6 +128,15 @@
             </com.google.android.material.chip.ChipGroup>
 
         </HorizontalScrollView>
+
+        <!-- Shown while a search runs (Spotify searches go over the network). -->
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/searchProgress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:indeterminate="true"
+            android:visibility="gone"
+            tools:visibility="visible" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <code.name.monkey.retromusic.views.insets.InsetsRecyclerView

@@ -101,6 +101,10 @@ class SearchFragment : AbsMainActivityFragment(R.layout.fragment_search),
         libraryViewModel.getSearchResult().observe(viewLifecycleOwner) {
             showData(it)
         }
+        binding.searchProgress.setIndicatorColor(accentColor())
+        libraryViewModel.isSearchLoading().observe(viewLifecycleOwner) { loading ->
+            binding.searchProgress.isVisible = loading
+        }
         setupChips()
         postponeEnterTransition()
         view.doOnPreDraw {

@@ -13,6 +13,11 @@ import androidx.viewpager.widget.ViewPager
 import code.name.monkey.appthemehelper.util.VersionUtils
 import code.name.monkey.retromusic.ADAPTIVE_COLOR_APP
 import code.name.monkey.retromusic.ALBUM_ARTISTS_ONLY
+import code.name.monkey.retromusic.SPOTIFY_MODE
+import code.name.monkey.retromusic.REPLAY_GAIN
+import code.name.monkey.retromusic.FAVORITE_PLAYLISTS
+import code.name.monkey.retromusic.SQUIGGLY_PROGRESS
+import code.name.monkey.retromusic.FAVORITE_PLAYLISTS_ONLY
 import code.name.monkey.retromusic.ALBUM_ART_ON_LOCK_SCREEN
 import code.name.monkey.retromusic.ALBUM_COVER_STYLE
 import code.name.monkey.retromusic.ALBUM_COVER_TRANSFORM
@@ -183,6 +188,35 @@ object PreferenceUtil {
 
 
     val baseTheme get() = sharedPreferences.getStringOrDefault(GENERAL_THEME, "auto")
+
+    /** Wavy progress bar in the player instead of the flat track. */
+    val squigglyProgress: Boolean
+        get() = sharedPreferences.getBoolean(SQUIGGLY_PROGRESS, false)
+
+    /** Playlists pinned to the top of the Playlists tab (Retro and Spotify playlist ids). */
+    val favoritePlaylistIds: Set<Long>
+        get() = sharedPreferences.getStringSet(FAVORITE_PLAYLISTS, null)
+            ?.mapNotNullTo(HashSet()) { it.toLongOrNull() }.orEmpty()
+
+    fun isFavoritePlaylist(playlistId: Long): Boolean = playlistId in favoritePlaylistIds
+
+    /** Adds or removes [playlistId]; returns whether it is now a favorite. */
+    fun toggleFavoritePlaylist(playlistId: Long): Boolean {
+        val ids = favoritePlaylistIds.toMutableSet()
+        val nowFavorite = playlistId !in ids
+        if (nowFavorite) ids.add(playlistId) else ids.remove(playlistId)
+        sharedPreferences.edit { putStringSet(FAVORITE_PLAYLISTS, ids.mapTo(HashSet()) { it.toString() }) }
+        return nowFavorite
+    }
+
+    /** Playlists tab shows only favorites. */
+    var showOnlyFavoritePlaylists: Boolean
+        get() = sharedPreferences.getBoolean(FAVORITE_PLAYLISTS_ONLY, false)
+        set(value) = sharedPreferences.edit { putBoolean(FAVORITE_PLAYLISTS_ONLY, value) }
+
+    /** ReplayGain for local files: "off", "track" or "album". Spotify mode uses librespot's own. */
+    val replayGainMode: String
+        get() = sharedPreferences.getStringOrDefault(REPLAY_GAIN, REPLAY_GAIN_TRACK)
 
     fun getGeneralThemeValue(isSystemDark: Boolean): ThemeMode {
         val themeMode: String =
@@ -438,6 +472,15 @@ object PreferenceUtil {
 
     val isLockScreen get() = sharedPreferences.getBoolean(LOCK_SCREEN, false)
 
+    /**
+     * Library source: true serves the library and playback from Spotify (go-librespot) instead
+     * of MediaStore. The bundled AAR needs API 30+, so this is always false below that.
+     */
+    var isSpotifyMode: Boolean
+        get() = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R &&
+                sharedPreferences.getBoolean(SPOTIFY_MODE, false)
+        set(value) = sharedPreferences.edit { putBoolean(SPOTIFY_MODE, value) }
+
     @Suppress("deprecation")
     fun isAllowedToDownloadMetadata(context: Context): Boolean {
         return when (autoDownloadImagesPolicy) {
@@ -649,6 +692,9 @@ object PreferenceUtil {
             putInt(PLAYLIST_GRID_SIZE, value)
         }
 
+    /** Default portrait playlist columns, for turning the three-column setting off. */
+    val defaultPlaylistGridSize: Int
+        get() = App.getContext().getIntRes(R.integer.default_grid_columns)
 
     var playlistGridSizeLand
         get() = sharedPreferences.getInt(
@@ -656,7 +702,7 @@ object PreferenceUtil {
             App.getContext().getIntRes(R.integer.default_grid_columns_land)
         )
         set(value) = sharedPreferences.edit {
-            putInt(PLAYLIST_GRID_SIZE, value)
+            putInt(PLAYLIST_GRID_SIZE_LAND, value)
         }
 
     var albumCoverStyle: AlbumCoverStyle
@@ -864,3 +910,7 @@ object PreferenceUtil {
 enum class CoverLyricsType {
     REPLACE_COVER, OVER_COVER
 }
+
+const val REPLAY_GAIN_OFF = "off"
+const val REPLAY_GAIN_TRACK = "track"
+const val REPLAY_GAIN_ALBUM = "album"

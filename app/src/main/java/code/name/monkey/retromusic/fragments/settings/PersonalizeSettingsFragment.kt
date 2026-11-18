@@ -20,6 +20,7 @@ import code.name.monkey.appthemehelper.common.prefs.supportv7.ATEListPreference
 import code.name.monkey.appthemehelper.common.prefs.supportv7.ATESwitchPreference
 import code.name.monkey.appthemehelper.util.VersionUtils
 import code.name.monkey.retromusic.*
+import code.name.monkey.retromusic.util.PreferenceUtil
 
 class PersonalizeSettingsFragment : AbsSettingsFragment() {
 
@@ -52,6 +53,15 @@ class PersonalizeSettingsFragment : AbsSettingsFragment() {
         tabTextMode?.setOnPreferenceChangeListener { prefs, newValue ->
             setSummary(prefs, newValue)
             true
+        }
+        // Not stored itself: it reads and writes the Playlists tab's portrait column count.
+        findPreference<ATESwitchPreference>(PLAYLIST_THREE_COLUMNS)?.apply {
+            isChecked = PreferenceUtil.playlistGridSize == 3
+            setOnPreferenceChangeListener { _, newValue ->
+                PreferenceUtil.playlistGridSize =
+                    if (newValue as Boolean) 3 else PreferenceUtil.defaultPlaylistGridSize.coerceAtMost(2)
+                true
+            }
         }
         val appBarMode: ATEListPreference? = findPreference(APPBAR_MODE)
         appBarMode?.setOnPreferenceChangeListener { _, _ ->

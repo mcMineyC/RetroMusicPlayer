@@ -221,4 +221,28 @@
         <item>@string/choose_image</item>
         <item>@string/remove_image</item>
     </string-array>
+
+    <string-array name="pref_replay_gain_titles">
+        <item>@string/replay_gain_off</item>
+        <item>@string/replay_gain_track</item>
+        <item>@string/replay_gain_album</item>
+    </string-array>
+
+    <string-array name="pref_replay_gain_values" translatable="false">
+        <item>off</item>
+        <item>track</item>
+        <item>album</item>
+    </string-array>
+
+    <string-array name="pref_spotify_bitrate_titles">
+        <item>@string/spotify_bitrate_low</item>
+        <item>@string/spotify_bitrate_normal</item>
+        <item>@string/spotify_bitrate_high</item>
+    </string-array>
+
+    <string-array name="pref_spotify_bitrate_values" translatable="false">
+        <item>96</item>
+        <item>160</item>
+        <item>320</item>
+    </string-array>
 </resources>

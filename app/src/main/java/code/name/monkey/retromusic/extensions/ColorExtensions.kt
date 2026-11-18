@@ -38,6 +38,9 @@ import code.name.monkey.appthemehelper.util.ATHUtil
 import code.name.monkey.appthemehelper.util.ColorUtil
 import code.name.monkey.appthemehelper.util.MaterialValueHelper
 import code.name.monkey.retromusic.R
+import code.name.monkey.retromusic.helper.MusicPlayerRemote
+import code.name.monkey.retromusic.util.PreferenceUtil
+import code.name.monkey.retromusic.views.SquigglyProgressDrawable
 import code.name.monkey.retromusic.util.PreferenceUtil.materialYou
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.ExtendedFloatingActionButton
@@ -161,18 +164,81 @@ fun MaterialButton.elevatedAccentColor() {
 }
 
 fun SeekBar.applyColor(@ColorInt color: Int) {
+    setTag(R.id.tag_progress_color, color)
     thumbTintList = ColorStateList.valueOf(color)
+    if (PreferenceUtil.squigglyProgress) {
+        val squiggly = getTag(R.id.tag_squiggly_progress) as? SquigglyProgressDrawable
+            ?: SquigglyProgressDrawable(resources.displayMetrics.density, useLevel = true) {
+                MusicPlayerRemote.isPlaying
+            }.also {
+                setTag(R.id.tag_original_progress_drawable, progressDrawable)
+                setTag(R.id.tag_squiggly_progress, it)
+                progressTintList = null
+                progressBackgroundTintList = null
+                progressDrawable = it
+            }
+        squiggly.color = color
+        return
+    }
+    if (getTag(R.id.tag_squiggly_progress) != null) {
+        progressDrawable = getTag(R.id.tag_original_progress_drawable) as? Drawable
+        setTag(R.id.tag_squiggly_progress, null)
+        setTag(R.id.tag_original_progress_drawable, null)
+    }
     progressTintList = ColorStateList.valueOf(color)
     progressBackgroundTintList = ColorStateList.valueOf(color)
 }
 
 fun Slider.applyColor(@ColorInt color: Int) {
+    setTag(R.id.tag_progress_color, color)
     ColorStateList.valueOf(color).run {
         thumbTintList = this
-        trackActiveTintList = this
-        trackInactiveTintList = ColorStateList.valueOf(color.addAlpha(0.1f))
         haloTintList = this
     }
+    if (PreferenceUtil.squigglyProgress) {
+        val squiggly = getTag(R.id.tag_squiggly_progress) as? SquigglyProgressDrawable
+            ?: SquigglyProgressDrawable(resources.displayMetrics.density, useLevel = false) {
+                MusicPlayerRemote.isPlaying
+            }.also { drawable ->
+                setTag(R.id.tag_original_progress_drawable, background)
+                setTag(R.id.tag_squiggly_progress, drawable)
+                background = drawable
+                // Follow the value; the listener stays but does nothing once the wave is removed.
+                addOnChangeListener { slider, _, _ -> slider.syncSquiggly() }
+            }
+        // The slider draws only the thumb; the wave stands in for both track parts.
+        val clear = ColorStateList.valueOf(Color.TRANSPARENT)
+        trackActiveTintList = clear
+        trackInactiveTintList = clear
+        squiggly.color = color
+        syncSquiggly()
+        return
+    }
+    if (getTag(R.id.tag_squiggly_progress) != null) {
+        background = getTag(R.id.tag_original_progress_drawable) as? Drawable
+        setTag(R.id.tag_squiggly_progress, null)
+        setTag(R.id.tag_original_progress_drawable, null)
+    }
+    trackActiveTintList = ColorStateList.valueOf(color)
+    trackInactiveTintList = ColorStateList.valueOf(color.addAlpha(0.1f))
+}
+
+/** Lines the wave up with the slider's track and value. */
+private fun Slider.syncSquiggly() {
+    val squiggly = getTag(R.id.tag_squiggly_progress) as? SquigglyProgressDrawable ?: return
+    squiggly.insetStart = trackSidePadding.toFloat()
+    squiggly.insetEnd = trackSidePadding.toFloat()
+    val range = valueTo - valueFrom
+    squiggly.fraction = if (range > 0f) (value - valueFrom) / range else 0f
+}
+
+/** Re-applies the last color, e.g. after the squiggly setting changed. */
+fun Slider.refreshProgressStyle() {
+    (getTag(R.id.tag_progress_color) as? Int)?.let { applyColor(it) }
+}
+
+fun SeekBar.refreshProgressStyle() {
+    (getTag(R.id.tag_progress_color) as? Int)?.let { applyColor(it) }
 }
 
 fun ExtendedFloatingActionButton.accentColor() {

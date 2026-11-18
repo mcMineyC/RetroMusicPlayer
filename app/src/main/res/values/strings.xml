@@ -528,4 +528,89 @@
     <string name="try_retro_music_premium" translatable="false" />
     <string name="listing_files" translatable="false" />
 
+
+    <!-- Spotify (go-librespot) mode -->
+    <string name="spotify">Spotify</string>
+    <string name="spotify_settings_summary">Play your Spotify library with Retro</string>
+    <string name="pref_header_spotify_library">Library</string>
+    <string name="pref_header_spotify_playback">Playback</string>
+    <string name="pref_title_spotify_mode">Use Spotify library</string>
+    <string name="pref_summary_spotify_mode">Show and play your Spotify playlists and saved albums instead of files on this device</string>
+    <string name="spotify_requires_android_11">Spotify mode needs Android 11 or newer</string>
+    <string name="spotify_login">Log in to Spotify</string>
+    <string name="spotify_logged_in">Logged in. Tap to log out</string>
+    <string name="spotify_logged_out">Not logged in. Tap to log in</string>
+    <string name="spotify_logout_confirm">Log out of Spotify and clear the cached library?</string>
+    <string name="spotify_logout">Log out</string>
+    <string name="spotify_login_success">Logged in to Spotify</string>
+    <string name="spotify_login_failed">Spotify login failed</string>
+    <string name="pref_title_spotify_sync">Sync library</string>
+    <string name="spotify_sync_idle">Read your playlists and saved albums to fill the Songs, Albums and Artists tabs</string>
+    <string name="spotify_sync_running">Syncing %1$s: %2$d of %3$d</string>
+    <string name="spotify_sync_step_library">library</string>
+    <string name="spotify_sync_step_playlists">playlists</string>
+    <string name="spotify_sync_step_tracks">tracks</string>
+    <string name="spotify_sync_step_artists">artists</string>
+    <string name="spotify_sync_step_albums">saved albums</string>
+    <string name="spotify_sync_step_liked">Liked Songs</string>
+    <string name="spotify_liked_songs">Liked Songs</string>
+    <string name="action_add_to_liked_songs">Add to Liked Songs</string>
+    <plurals name="spotify_added_to_liked_songs">
+        <item quantity="one">Added %d song to Liked Songs</item>
+        <item quantity="other">Added %d songs to Liked Songs</item>
+    </plurals>
+    <string name="spotify_sync_finished">%1$d songs from %2$d library items</string>
+    <string name="spotify_sync_failed">Sync failed: %1$s</string>
+    <string name="spotify_sync_needs_login">Log in to Spotify first</string>
+    <string name="pref_title_spotify_full_rescan">Rebuild library cache</string>
+    <string name="pref_summary_spotify_full_rescan">Fetch every track again. This is slow for large libraries</string>
+    <string name="pref_title_spotify_device_name">Device name</string>
+    <string name="pref_title_spotify_bitrate">Streaming quality</string>
+    <string name="spotify_bitrate_low">Low (96 kbps)</string>
+    <string name="spotify_bitrate_normal">Normal (160 kbps)</string>
+    <string name="spotify_bitrate_high">High (320 kbps)</string>
+    <string name="pref_title_spotify_normalisation">Normalize volume</string>
+    <string name="pref_summary_spotify_normalisation">Play all songs at a similar loudness</string>
+    <string name="pref_title_spotify_ogg_dump">Save tracks as they play</string>
+    <string name="pref_summary_spotify_ogg_dump">Keep a copy of each Spotify track you play on this device, and play saved tracks from that copy</string>
+    <string name="action_favorite_playlist">Favorite</string>
+    <string name="pref_title_playlist_three_columns">Three-column playlists</string>
+    <string name="pref_summary_playlist_three_columns">Show the Playlists tab as a grid with three columns</string>
+    <string name="action_save_offline_m3u">Save as M3U for local mode</string>
+    <string name="spotify_offline_m3u_saved">Saved %1$s: %2$d of %3$d tracks are on this device. It shows up in local mode\'s playlists automatically.</string>
+    <string name="spotify_offline_m3u_app_storage">Saved %1$s in app storage, which local mode can\'t see. Choose a saved tracks folder in Spotify settings first.</string>
+    <string name="spotify_offline_m3u_failed">Could not save the playlist file</string>
+    <string name="pref_title_squiggly_progress">Squiggly progress bar</string>
+    <string name="pref_summary_squiggly_progress">Show the song progress as a wave that moves while music plays</string>
+    <string name="action_show_favorite_playlists">Favorites only</string>
+    <string name="pref_title_replay_gain">ReplayGain</string>
+    <string name="pref_summary_replay_gain">Use the loudness values stored in local files so songs play at a similar volume. Quiet songs are not boosted.</string>
+    <string name="replay_gain_off">Off</string>
+    <string name="replay_gain_track">Track</string>
+    <string name="replay_gain_album">Album</string>
+    <string name="pref_title_spotify_ogg_dump_dir">Saved tracks folder</string>
+    <string name="spotify_ogg_dump_dir_default">App storage (deleted if you uninstall Retro)</string>
+    <string name="spotify_ogg_dump_dir_unavailable">%s (can\'t be used right now, saving to app storage)</string>
+    <string name="spotify_ogg_dump_choose_folder">Choose folder</string>
+    <string name="spotify_ogg_dump_use_app_storage">Use app storage</string>
+    <string name="spotify_ogg_dump_access_title">Allow access to all files</string>
+    <string name="spotify_ogg_dump_access_message">The Spotify player reads and writes the saved tracks folder directly, which Android only allows for folders outside app storage with All files access. Retro only uses it for the folder you choose.</string>
+    <string name="spotify_ogg_dump_folder_unsupported">Choose a folder on the phone\'s storage or an SD card</string>
+    <string name="spotify_ogg_dump_folder_not_writable">Retro can\'t write to that folder</string>
+    <string name="spotify_ogg_dump_move_title">Move saved tracks?</string>
+    <plurals name="spotify_ogg_dump_move_message">
+        <item quantity="one">Move %d saved track to the new folder?</item>
+        <item quantity="other">Move %d saved tracks to the new folder?</item>
+    </plurals>
+    <string name="spotify_ogg_dump_move">Move</string>
+    <string name="spotify_ogg_dump_keep">Leave them</string>
+    <plurals name="spotify_ogg_dump_moved">
+        <item quantity="one">Moved %d track</item>
+        <item quantity="other">Moved %d tracks</item>
+    </plurals>
+    <string name="spotify_queue_reorder_unsupported">Only songs you added to the queue can be moved</string>
+    <string name="spotify_file_action_unavailable">Not available for Spotify songs</string>
+    <string name="spotify_playlist_read_only">You can\'t edit this Spotify playlist</string>
+    <string name="spotify_playlist_edit_failed">Spotify didn\'t accept the playlist change</string>
+
 </resources>

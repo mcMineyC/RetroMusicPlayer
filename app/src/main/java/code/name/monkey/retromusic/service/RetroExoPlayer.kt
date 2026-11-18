@@ -41,6 +41,10 @@ class RetroExoPlayer(context: Context) : AudioManagerPlayback(context), Player.L
     override var isInitialized = false
         private set
 
+    /** Volume requested by fades/ducking, and the current song's ReplayGain factor. */
+    private var requestedVolume = 1f
+    private var replayGain = 1f
+
     init {
         player.setWakeMode(C.WAKE_MODE_LOCAL)
     }
@@ -183,11 +187,24 @@ class RetroExoPlayer(context: Context) : AudioManagerPlayback(context), Player.L
     }
 
     override fun setVolume(vol: Float): Boolean {
+        requestedVolume = vol
         return try {
-            player.volume = vol
+            player.volume = vol * replayGain
             true
         } catch (e: Exception) {
             false
+        }
+    }
+
+    override fun setReplayGain(factor: Float) {
+        // ExoPlayer must be used from the thread it was created on (main).
+        Handler(Looper.getMainLooper()).post {
+            replayGain = factor
+            try {
+                player.volume = requestedVolume * factor
+            } catch (e: Exception) {
+                // player released
+            }
         }
     }
 
@@ -231,6 +248,7 @@ class RetroExoPlayer(context: Context) : AudioManagerPlayback(context), Player.L
             .setAudioAttributes(audioAttributes, false)
             .build()
         player.setWakeMode(C.WAKE_MODE_LOCAL)
+        player.volume = requestedVolume * replayGain
         context.showToast(R.string.unplayable_file)
     }
 

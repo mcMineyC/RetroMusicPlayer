@@ -24,9 +24,11 @@ import code.name.monkey.retromusic.db.PlaylistEntity
 import code.name.monkey.retromusic.db.toSongEntity
 import code.name.monkey.retromusic.db.toSongsEntity
 import code.name.monkey.retromusic.dialogs.RemoveSongFromPlaylistDialog
+import code.name.monkey.retromusic.extensions.showToast
 import code.name.monkey.retromusic.fragments.LibraryViewModel
 import code.name.monkey.retromusic.helper.MusicPlayerRemote
 import code.name.monkey.retromusic.model.Song
+import code.name.monkey.retromusic.spotify.SpotifyPlaylistInfo
 import code.name.monkey.retromusic.util.ViewUtil
 import com.h6ah4i.android.widget.advrecyclerview.draggable.DraggableItemAdapter
 import com.h6ah4i.android.widget.advrecyclerview.draggable.ItemDraggableRange
@@ -70,9 +72,15 @@ class OrderablePlaylistSongAdapter(
         return ViewHolder(view)
     }
 
+    private val canEditSongs: Boolean get() = SpotifyPlaylistInfo.canEditSongs(playlistId)
+    private val canReorder: Boolean get() = SpotifyPlaylistInfo.canReorder(playlistId)
+    private val isSpotifyPlaylist: Boolean get() = SpotifyPlaylistInfo.isSpotifyPlaylist(playlistId)
+
     override fun onMultipleItemAction(menuItem: MenuItem, selection: List<Song>) {
         when (menuItem.itemId) {
-            R.id.action_remove_from_playlist -> RemoveSongFromPlaylistDialog.create(
+            R.id.action_remove_from_playlist -> if (!canEditSongs) {
+                activity.showToast(R.string.spotify_playlist_read_only)
+            } else RemoveSongFromPlaylistDialog.create(
                 selection.toSongsEntity(
                     playlistId
                 )
@@ -94,6 +102,10 @@ class OrderablePlaylistSongAdapter(
         override fun onSongMenuItemClick(item: MenuItem): Boolean {
             when (item.itemId) {
                 R.id.action_remove_from_playlist -> {
+                    if (!canEditSongs) {
+                        activity.showToast(R.string.spotify_playlist_read_only)
+                        return true
+                    }
                     RemoveSongFromPlaylistDialog.create(song.toSongEntity(playlistId))
                         .show(activity.supportFragmentManager, "REMOVE_FROM_PLAYLIST")
                     return true
@@ -112,12 +124,12 @@ class OrderablePlaylistSongAdapter(
         }
 
         init {
-            dragView?.isVisible = true
+            dragView?.isVisible = canReorder
         }
     }
 
     override fun onCheckCanStartDrag(holder: ViewHolder, position: Int, x: Int, y: Int): Boolean {
-        if (isInQuickSelectMode || filtered) {
+        if (isInQuickSelectMode || filtered || !canReorder) {
             return false
         }
         return ViewUtil.hitTest(holder.imageText!!, x, y) || ViewUtil.hitTest(
@@ -145,10 +157,16 @@ class OrderablePlaylistSongAdapter(
 
     override fun onItemDragFinished(fromPosition: Int, toPosition: Int, result: Boolean) {
         notifyDataSetChanged()
+        // Room playlists save their order in saveSongs; Spotify ones are edited right away.
+        if (isSpotifyPlaylist && result && fromPosition != toPosition) {
+            fullDataSet = dataSet.toMutableList()
+            libraryViewModel.moveSongInSpotifyPlaylist(activity, playlistId, fromPosition, toPosition, dataSet)
+        }
     }
 
     fun saveSongs(playlistEntity: PlaylistEntity) {
         onFilter(null)
+        if (SpotifyPlaylistInfo.isSpotifyPlaylist(playlistEntity.playListId)) return
         activity.lifecycleScope.launch(Dispatchers.IO) {
             libraryViewModel.insertSongs(dataSet.toSongsEntity(playlistEntity))
         }

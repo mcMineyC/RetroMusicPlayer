@@ -31,6 +31,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
+import code.name.monkey.retromusic.extensions.showToast
+import code.name.monkey.retromusic.spotify.SpotifyPlaylistInfo
+import code.name.monkey.retromusic.fragments.LibraryViewModel
+import code.name.monkey.retromusic.spotify.LibrespotEngine
+import code.name.monkey.retromusic.spotify.SpotifyOfflinePlaylist
+import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
+import code.name.monkey.retromusic.fragments.ReloadType
+import code.name.monkey.retromusic.util.PreferenceUtil
+import org.koin.androidx.viewmodel.ext.android.getViewModel
 
 object PlaylistMenuHelper : KoinComponent {
 
@@ -40,6 +50,39 @@ object PlaylistMenuHelper : KoinComponent {
         item: MenuItem
     ): Boolean {
         when (item.itemId) {
+            R.id.action_favorite_playlist -> {
+                item.isChecked =
+                    PreferenceUtil.toggleFavoritePlaylist(playlistWithSongs.playlistEntity.playListId)
+                // Re-sort the Playlists tab so favorites move to the top.
+                (activity.getViewModel() as LibraryViewModel).forceReload(ReloadType.Playlists)
+                return true
+            }
+            R.id.action_save_offline_m3u -> {
+                val appContext = activity.applicationContext
+                activity.lifecycleScope.launch(Dispatchers.IO) {
+                    val result = try {
+                        SpotifyOfflinePlaylist.write(appContext, get<LibrespotEngine>(), playlistWithSongs)
+                    } catch (e: Exception) {
+                        null
+                    }
+                    withContext(Dispatchers.Main) {
+                        when {
+                            result == null -> appContext.showToast(R.string.spotify_offline_m3u_failed)
+                            result.visibleToMediaStore -> appContext.showToast(
+                                appContext.getString(
+                                    R.string.spotify_offline_m3u_saved,
+                                    result.file.name, result.saved, result.tracks
+                                ), Toast.LENGTH_LONG
+                            )
+                            else -> appContext.showToast(
+                                appContext.getString(R.string.spotify_offline_m3u_app_storage, result.file.name),
+                                Toast.LENGTH_LONG
+                            )
+                        }
+                    }
+                }
+                return true
+            }
             R.id.action_play -> {
                 MusicPlayerRemote.openQueue(playlistWithSongs.songs.toSongs(), 0, true)
                 return true
@@ -63,11 +106,19 @@ object PlaylistMenuHelper : KoinComponent {
                 return true
             }
             R.id.action_rename_playlist -> {
+                if (!SpotifyPlaylistInfo.canRename(playlistWithSongs.playlistEntity.playListId)) {
+                    activity.showToast(R.string.spotify_playlist_read_only)
+                    return true
+                }
                 RenamePlaylistDialog.create(playlistWithSongs.playlistEntity)
                     .show(activity.supportFragmentManager, "RENAME_PLAYLIST")
                 return true
             }
             R.id.action_delete_playlist -> {
+                if (!SpotifyPlaylistInfo.canDelete(playlistWithSongs.playlistEntity.playListId)) {
+                    activity.showToast(R.string.spotify_playlist_read_only)
+                    return true
+                }
                 DeletePlaylistDialog.create(playlistWithSongs.playlistEntity)
                     .show(activity.supportFragmentManager, "DELETE_PLAYLIST")
                 return true

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.preference.PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreference
+        android:key="spotify_account"
+        android:layout="@layout/list_item_view"
+        android:summary="@string/spotify_logged_out"
+        android:title="@string/spotify"
+        app:icon="@drawable/ic_account" />
+
+    <code.name.monkey.appthemehelper.common.prefs.supportv7.ATESwitchPreference
+        android:defaultValue="false"
+        android:key="spotify_mode"
+        android:layout="@layout/list_item_view_switch"
+        android:summary="@string/pref_summary_spotify_mode"
+        android:title="@string/pref_title_spotify_mode" />
+
+    <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreferenceCategory
+        android:layout="@layout/preference_category_title"
+        android:title="@string/pref_header_spotify_library">
+
+        <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreference
+            android:key="spotify_sync"
+            android:layout="@layout/list_item_view"
+            android:summary="@string/spotify_sync_idle"
+            android:title="@string/pref_title_spotify_sync"
+            app:icon="@drawable/ic_refresh" />
+
+        <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreference
+            android:key="spotify_full_rescan"
+            android:layout="@layout/list_item_view"
+            android:summary="@string/pref_summary_spotify_full_rescan"
+            android:title="@string/pref_title_spotify_full_rescan"
+            app:icon="@drawable/ic_library_music" />
+
+    </code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreferenceCategory>
+
+    <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreferenceCategory
+        android:layout="@layout/preference_category_title"
+        android:title="@string/pref_header_spotify_playback">
+
+        <EditTextPreference
+            android:key="spotify_device_name"
+            android:layout="@layout/list_item_view"
+            android:title="@string/pref_title_spotify_device_name"
+            app:icon="@drawable/ic_person_flat"
+            app:useSimpleSummaryProvider="true" />
+
+        <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEListPreference
+            android:defaultValue="160"
+            android:entries="@array/pref_spotify_bitrate_titles"
+            android:entryValues="@array/pref_spotify_bitrate_values"
+            android:key="spotify_bitrate"
+            android:layout="@layout/list_item_view"
+            android:negativeButtonText="@null"
+            android:positiveButtonText="@null"
+            android:title="@string/pref_title_spotify_bitrate"
+            app:icon="@drawable/ic_audiotrack" />
+
+        <code.name.monkey.appthemehelper.common.prefs.supportv7.ATESwitchPreference
+            android:defaultValue="true"
+            android:key="spotify_normalisation"
+            android:layout="@layout/list_item_view_switch"
+            android:summary="@string/pref_summary_spotify_normalisation"
+            android:title="@string/pref_title_spotify_normalisation" />
+
+        <code.name.monkey.appthemehelper.common.prefs.supportv7.ATESwitchPreference
+            android:defaultValue="false"
+            android:key="spotify_ogg_dump"
+            android:layout="@layout/list_item_view_switch"
+            android:summary="@string/pref_summary_spotify_ogg_dump"
+            android:title="@string/pref_title_spotify_ogg_dump" />
+
+        <code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreference
+            android:key="spotify_ogg_dump_dir"
+            android:layout="@layout/list_item_view"
+            android:summary="@string/spotify_ogg_dump_dir_default"
+            android:title="@string/pref_title_spotify_ogg_dump_dir"
+            app:icon="@drawable/ic_folder" />
+
+    </code.name.monkey.appthemehelper.common.prefs.supportv7.ATEPreferenceCategory>
+
+</androidx.preference.PreferenceScreen>

@@ -14,6 +14,7 @@
  */
 package code.name.monkey.retromusic.fragments.base
 
+import code.name.monkey.retromusic.extensions.refreshProgressStyle
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
 import android.graphics.PorterDuff
@@ -267,6 +268,9 @@ abstract class AbsPlayerControlsFragment(@LayoutRes layout: Int) : AbsMusicServi
     override fun onResume() {
         super.onResume()
         progressViewUpdateHelper.start()
+        // Picks up the squiggly progress setting after returning from Settings.
+        progressSlider?.refreshProgressStyle()
+        seekBar?.refreshProgressStyle()
     }
 
     override fun onPause() {

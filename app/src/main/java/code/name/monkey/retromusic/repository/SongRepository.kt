@@ -51,6 +51,9 @@ interface SongRepository {
 
     fun songsByFilePath(filePath: String, ignoreBlacklist: Boolean = false): List<Song>
 
+    /** Every song stored under [folderPath], ignoring the blacklist and length filter. */
+    fun songsUnderFolder(folderPath: String): List<Song>
+
     fun song(cursor: Cursor?): Song
 
     fun song(songId: Long): Song
@@ -125,6 +128,13 @@ class RealSongRepository(private val context: Context) : SongRepository {
                 ignoreBlacklist = ignoreBlacklist
             )
         )
+    }
+
+    override fun songsUnderFolder(folderPath: String): List<Song> {
+        val prefix = folderPath.trimEnd('/') + "/"
+        return songs(
+            makeSongCursor(Constants.DATA + " LIKE ?", arrayOf("$prefix%"), ignoreBlacklist = true)
+        ).filter { it.data.startsWith(prefix) }
     }
 
     private fun getSongFromCursorImpl(

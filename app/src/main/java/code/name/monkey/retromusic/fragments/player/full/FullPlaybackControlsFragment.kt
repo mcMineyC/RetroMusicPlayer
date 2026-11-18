@@ -31,8 +31,6 @@ import code.name.monkey.appthemehelper.util.ColorUtil
 import code.name.monkey.appthemehelper.util.VersionUtils
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.FragmentFullPlayerControlsBinding
-import code.name.monkey.retromusic.db.PlaylistEntity
-import code.name.monkey.retromusic.db.toSongEntity
 import code.name.monkey.retromusic.extensions.*
 import code.name.monkey.retromusic.fragments.LibraryViewModel
 import code.name.monkey.retromusic.fragments.ReloadType
@@ -43,6 +41,7 @@ import code.name.monkey.retromusic.helper.MusicPlayerRemote
 import code.name.monkey.retromusic.helper.PlayPauseButtonOnClickHandler
 import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.service.MusicService
+import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.PreferenceUtil
 import code.name.monkey.retromusic.util.color.MediaNotificationProcessor
 import com.google.android.material.slider.Slider
@@ -196,6 +195,7 @@ class FullPlaybackControlsFragment :
             popupMenu.inflate(R.menu.menu_player)
             popupMenu.menu.findItem(R.id.action_toggle_favorite).isVisible = false
             popupMenu.menu.findItem(R.id.action_toggle_lyrics).isChecked = PreferenceUtil.showLyrics
+            (parentFragment as FullPlayerFragment).prepareOggDumpItem(popupMenu.menu)
             popupMenu.show()
         }
     }
@@ -224,8 +224,7 @@ class FullPlaybackControlsFragment :
 
     fun updateIsFavorite(animate: Boolean = false) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val isFavorite: Boolean =
-                libraryViewModel.isSongFavorite(MusicPlayerRemote.currentSong.id)
+            val isFavorite: Boolean = MusicUtil.isFavorite(MusicPlayerRemote.currentSong)
             withContext(Dispatchers.Main) {
                 val icon = if (animate) {
                     if (isFavorite) R.drawable.avd_favorite else R.drawable.avd_unfavorite
@@ -248,14 +247,7 @@ class FullPlaybackControlsFragment :
 
     private fun toggleFavorite(song: Song) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val playlist: PlaylistEntity = libraryViewModel.favoritePlaylist()
-            val songEntity = song.toSongEntity(playlist.playListId)
-            val isFavorite = libraryViewModel.isFavoriteSong(songEntity).isNotEmpty()
-            if (isFavorite) {
-                libraryViewModel.removeSongFromPlaylist(songEntity)
-            } else {
-                libraryViewModel.insertSongs(listOf(song.toSongEntity(playlist.playListId)))
-            }
+            MusicUtil.toggleFavorite(song)
             libraryViewModel.forceReload(ReloadType.Playlists)
             LocalBroadcastManager.getInstance(requireContext())
                 .sendBroadcast(Intent(MusicService.FAVORITE_STATE_CHANGED))

@@ -24,6 +24,7 @@ import android.media.MediaMetadataRetriever
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.GestureDetector
+import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
@@ -32,7 +33,9 @@ import androidx.annotation.LayoutRes
 import androidx.appcompat.widget.Toolbar
 import androidx.core.os.bundleOf
 import androidx.core.view.isVisible
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.navigation.findNavController
 import androidx.navigation.navOptions
@@ -44,8 +47,6 @@ import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.activities.MainActivity
 import code.name.monkey.retromusic.activities.tageditor.AbsTagEditorActivity
 import code.name.monkey.retromusic.activities.tageditor.SongTagEditorActivity
-import code.name.monkey.retromusic.db.PlaylistEntity
-import code.name.monkey.retromusic.db.toSongEntity
 import code.name.monkey.retromusic.dialogs.AddToPlaylistDialog
 import code.name.monkey.retromusic.dialogs.CreatePlaylistDialog
 import code.name.monkey.retromusic.dialogs.DeleteSongsDialog
@@ -68,6 +69,8 @@ import code.name.monkey.retromusic.interfaces.IPaletteColorHolder
 import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.service.MusicService
+import code.name.monkey.retromusic.spotify.LibrespotEngine
+import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.NavigationUtil
 import code.name.monkey.retromusic.util.PreferenceUtil
 import code.name.monkey.retromusic.util.RingtoneManager
@@ -77,6 +80,7 @@ import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.android.ext.android.get
+import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.activityViewModel
 import kotlin.math.abs
 
@@ -89,6 +93,8 @@ abstract class AbsPlayerFragment(@LayoutRes layout: Int) : AbsMusicServiceFragme
         get() = activity as MainActivity
 
     private var playerAlbumCoverFragment: PlayerAlbumCoverFragment? = null
+
+    private val librespotEngine: LibrespotEngine by inject()
 
     override fun onMenuItemClick(
         item: MenuItem,
@@ -170,6 +176,13 @@ abstract class AbsPlayerFragment(@LayoutRes layout: Int) : AbsMusicServiceFragme
                 return true
             }
 
+            R.id.action_spotify_ogg_dump -> {
+                val enabled = !librespotEngine.oggDumpEnabled.value
+                librespotEngine.setOggDumpEnabled(enabled)
+                item.isChecked = enabled
+                return true
+            }
+
             R.id.action_go_to_album -> {
                 //Hide Bottom Bar First, else Bottom Sheet doesn't collapse fully
                 mainActivity.setBottomNavVisibility(false)
@@ -243,6 +256,14 @@ abstract class AbsPlayerFragment(@LayoutRes layout: Int) : AbsMusicServiceFragme
         return false
     }
 
+    /** Shows the "save tracks as they play" toggle in Spotify mode, checked to match the setting. */
+    fun prepareOggDumpItem(menu: Menu) {
+        menu.findItem(R.id.action_spotify_ogg_dump)?.apply {
+            isVisible = PreferenceUtil.isSpotifyMode
+            isChecked = librespotEngine.oggDumpEnabled.value
+        }
+    }
+
     private fun showLyricsIcon(item: MenuItem) {
         val icon =
             if (PreferenceUtil.showLyrics) R.drawable.ic_lyrics else R.drawable.ic_lyrics_outline
@@ -276,14 +297,8 @@ abstract class AbsPlayerFragment(@LayoutRes layout: Int) : AbsMusicServiceFragme
 
     protected open fun toggleFavorite(song: Song) {
         lifecycleScope.launch(IO) {
-            val playlist: PlaylistEntity = libraryViewModel.favoritePlaylist()
-            val songEntity = song.toSongEntity(playlist.playListId)
-            val isFavorite = libraryViewModel.isSongFavorite(song.id)
-            if (isFavorite) {
-                libraryViewModel.removeSongFromPlaylist(songEntity)
-            } else {
-                libraryViewModel.insertSongs(listOf(song.toSongEntity(playlist.playListId)))
-            }
+            // Favorites playlist for local songs, Liked Songs in Spotify mode.
+            MusicUtil.toggleFavorite(song)
             libraryViewModel.forceReload(ReloadType.Playlists)
             LocalBroadcastManager.getInstance(requireContext())
                 .sendBroadcast(Intent(MusicService.FAVORITE_STATE_CHANGED))
@@ -292,8 +307,7 @@ abstract class AbsPlayerFragment(@LayoutRes layout: Int) : AbsMusicServiceFragme
 
     fun updateIsFavorite(animate: Boolean = false) {
         lifecycleScope.launch(IO) {
-            val isFavorite: Boolean =
-                libraryViewModel.isSongFavorite(MusicPlayerRemote.currentSong.id)
+            val isFavorite: Boolean = MusicUtil.isFavorite(MusicPlayerRemote.currentSong)
             withContext(Main) {
                 val icon = if (animate) {
                     if (isFavorite) R.drawable.avd_favorite else R.drawable.avd_unfavorite
@@ -341,12 +355,23 @@ abstract class AbsPlayerFragment(@LayoutRes layout: Int) : AbsMusicServiceFragme
         playerAlbumCoverFragment?.setCallbacks(this)
 
         view.findViewById<RelativeLayout>(R.id.statusBarShadow)?.hide()
+
+        // Keep the toolbar toggle in sync when it changes in settings or on a playlist screen.
+        // Wait for STARTED: subclasses bind their views after super.onViewCreated returns.
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                librespotEngine.oggDumpEnabled.collect { enabled ->
+                    playerToolbar()?.menu?.findItem(R.id.action_spotify_ogg_dump)?.isChecked = enabled
+                }
+            }
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onResume() {
         super.onResume()
         val nps = PreferenceUtil.nowPlayingScreen
+        playerToolbar()?.menu?.let { prepareOggDumpItem(it) }
 
         if (nps == NowPlayingScreen.Circle || nps == NowPlayingScreen.Peek || nps == NowPlayingScreen.Tiny) {
             playerToolbar()?.menu?.removeItem(R.id.action_toggle_lyrics)

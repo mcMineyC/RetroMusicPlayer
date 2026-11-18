@@ -16,8 +16,10 @@ package code.name.monkey.retromusic.fragments
 
 import android.animation.ValueAnimator
 import android.content.Context
+import android.content.Intent
 import androidx.core.animation.doOnEnd
 import androidx.lifecycle.*
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import code.name.monkey.retromusic.*
 import code.name.monkey.retromusic.db.*
 import code.name.monkey.retromusic.extensions.showToast
@@ -27,6 +29,12 @@ import code.name.monkey.retromusic.helper.MusicPlayerRemote
 import code.name.monkey.retromusic.interfaces.IMusicServiceEventListener
 import code.name.monkey.retromusic.model.*
 import code.name.monkey.retromusic.repository.RealRepository
+import code.name.monkey.retromusic.service.MusicService
+import code.name.monkey.retromusic.spotify.SpotifyIds
+import code.name.monkey.retromusic.spotify.SpotifyLibrarySync
+import code.name.monkey.retromusic.spotify.SpotifyPlaylistEditor
+import code.name.monkey.retromusic.spotify.SpotifyPlaylistInfo
+import code.name.monkey.retromusic.spotify.SpotifySyncState
 import code.name.monkey.retromusic.util.DensityUtil
 import code.name.monkey.retromusic.util.PreferenceUtil
 import code.name.monkey.retromusic.util.logD
@@ -43,6 +51,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class LibraryViewModel(
     private val repository: RealRepository,
+    private val spotifySync: SpotifyLibrarySync,
+    private val spotifyEditor: SpotifyPlaylistEditor,
 ) : ViewModel(), IMusicServiceEventListener {
 
     private val _paletteColor = MutableLiveData<Int>()
@@ -54,6 +64,7 @@ class LibraryViewModel(
     private val playlists = MutableLiveData<List<PlaylistWithSongs>>()
     private val genres = MutableLiveData<List<Genre>>()
     private val searchResults = MutableLiveData<List<Any>>()
+    private val searchLoading = MutableLiveData(false)
     private val fabMargin = MutableLiveData(0)
     private val songHistory = MutableLiveData<List<Song>>()
     private val playCountSongsData = MutableLiveData<List<Song>>()
@@ -64,6 +75,14 @@ class LibraryViewModel(
 
     init {
         loadLibraryContent()
+        // Spotify mode: the cache fills in the background, so reload when a sync finishes.
+        viewModelScope.launch {
+            spotifySync.state.collect { state ->
+                if (state is SpotifySyncState.Finished && PreferenceUtil.isSpotifyMode) {
+                    loadLibraryContent()
+                }
+            }
+        }
     }
 
     private fun loadLibraryContent() {
@@ -85,7 +104,7 @@ class LibraryViewModel(
 
             suggestions.postValue(suggestionsDeferred.await())
             genres.postValue(genresDeferred.await())
-            playlists.postValue(playlistsDeferred.await())
+            playlists.postValue(withFavoritesFirst(playlistsDeferred.await()))
             home.postValue(homeDeferred.await())
         }
     }
@@ -125,7 +144,18 @@ class LibraryViewModel(
     }
 
     private suspend fun fetchPlaylists() {
-        playlists.postValue(repository.fetchPlaylistWithSongs())
+        playlists.postValue(withFavoritesFirst(repository.fetchPlaylistWithSongs()))
+    }
+
+    /**
+     * Favorite playlists first, keeping the chosen sort order within each group; only the
+     * favorites when the Playlists tab is filtered.
+     */
+    private fun withFavoritesFirst(list: List<PlaylistWithSongs>): List<PlaylistWithSongs> {
+        val favorites = PreferenceUtil.favoritePlaylistIds
+        if (favorites.isEmpty()) return if (PreferenceUtil.showOnlyFavoritePlaylists) emptyList() else list
+        val (pinned, rest) = list.partition { it.playlistEntity.playListId in favorites }
+        return if (PreferenceUtil.showOnlyFavoritePlaylists) pinned else pinned + rest
     }
 
     private suspend fun fetchGenres() {
@@ -140,13 +170,22 @@ class LibraryViewModel(
         suggestions.postValue(repository.suggestions())
     }
 
+    /** True while the latest search is running. */
+    fun isSearchLoading(): LiveData<Boolean> = searchLoading
+
     fun search(query: String?, filter: Filter) =
         viewModelScope.launch(IO) {
             val requestId = searchRequestId.incrementAndGet()
-            delay(250)
-            val result = repository.search(query, filter)
-            if (isActive && requestId == searchRequestId.get()) {
-                searchResults.postValue(result)
+            searchLoading.postValue(true)
+            try {
+                delay(250)
+                val result = repository.search(query, filter)
+                if (isActive && requestId == searchRequestId.get()) {
+                    searchResults.postValue(result)
+                }
+            } finally {
+                // A newer search owns the indicator; only the latest one clears it.
+                if (requestId == searchRequestId.get()) searchLoading.postValue(false)
             }
         }
 
@@ -211,10 +250,6 @@ class LibraryViewModel(
         }
     }
 
-    fun renameRoomPlaylist(playListId: Long, name: String) = viewModelScope.launch(IO) {
-        repository.renameRoomPlaylist(playListId, name)
-    }
-
     fun deleteSongsInPlaylist(songs: List<SongEntity>) {
         viewModelScope.launch(IO) {
             repository.deleteSongsInPlaylist(songs)
@@ -222,12 +257,116 @@ class LibraryViewModel(
         }
     }
 
-    fun deleteSongsFromPlaylist(playlists: List<PlaylistEntity>) = viewModelScope.launch(IO) {
-        repository.deletePlaylistSongs(playlists)
+    // ---------------------------------------------------------------------------------------
+    // Playlist edits that may target a Spotify library item. Spotify edits go over the network
+    // through SpotifyPlaylistEditor; Retro's own playlists keep using Room.
+    // ---------------------------------------------------------------------------------------
+
+    /** Adds [songs] to an existing playlist chosen from the "Add to playlist" list. */
+    fun addToPlaylist(context: Context, playlist: PlaylistEntity, songs: List<Song>) {
+        if (!SpotifyPlaylistInfo.isSpotifyPlaylist(playlist.playListId)) {
+            addToPlaylist(context, playlist.playlistName, songs)
+            return
+        }
+        spotifyEdit(
+            context,
+            context.getString(R.string.added_song_count_to_playlist, songs.size, playlist.playlistName)
+        ) { spotifyEditor.addSongs(playlist.playListId, songs) }
     }
 
-    fun deleteRoomPlaylist(playlists: List<PlaylistEntity>) = viewModelScope.launch(IO) {
-        repository.deleteRoomPlaylist(playlists)
+    /** New playlists go to the Spotify library in Spotify mode, and to Room otherwise. */
+    fun createPlaylist(context: Context, name: String, songs: List<Song>) {
+        if (!PreferenceUtil.isSpotifyMode) {
+            addToPlaylist(context, name, songs)
+            return
+        }
+        spotifyEdit(context, context.getString(R.string.playlist_created_sucessfully, name)) {
+            spotifyEditor.create(name, songs)
+        }
+    }
+
+    fun renamePlaylist(context: Context, playlistId: Long, name: String) {
+        if (!SpotifyPlaylistInfo.isSpotifyPlaylist(playlistId)) {
+            viewModelScope.launch(IO) {
+                repository.renameRoomPlaylist(playlistId, name)
+                forceReload(Playlists)
+            }
+            return
+        }
+        spotifyEdit(context, null) { spotifyEditor.rename(playlistId, name) }
+    }
+
+    fun deletePlaylists(context: Context, playlists: List<PlaylistEntity>) {
+        val (spotify, room) = playlists.partition { SpotifyPlaylistInfo.isSpotifyPlaylist(it.playListId) }
+        if (room.isNotEmpty()) {
+            viewModelScope.launch(IO) {
+                repository.deletePlaylistSongs(room)
+                repository.deleteRoomPlaylist(room)
+                forceReload(Playlists)
+            }
+        }
+        if (spotify.isNotEmpty()) {
+            spotifyEdit(context, null) {
+                spotify.map { spotifyEditor.delete(it.playListId) }.all { it }
+            }
+        }
+    }
+
+    /** Removes [songs] from the playlists named by their `playlistCreatorId`. */
+    fun removeSongsFromPlaylists(context: Context, songs: List<SongEntity>) {
+        val (spotify, room) = songs.partition { SpotifyPlaylistInfo.isSpotifyPlaylist(it.playlistCreatorId) }
+        if (room.isNotEmpty()) deleteSongsInPlaylist(room)
+        if (spotify.isNotEmpty()) {
+            spotifyEdit(context, null) {
+                spotify.groupBy { it.playlistCreatorId }
+                    .map { (playlistId, entries) -> spotifyEditor.removeSongs(playlistId, entries.map { it.data }) }
+                    .all { it }
+            }
+        }
+    }
+
+    /**
+     * Applies a drag in a Spotify playlist right away. [songsAfter] is the list as shown after
+     * the drag; the playlist is re-read either way, so a rejected move snaps back.
+     */
+    fun moveSongInSpotifyPlaylist(
+        context: Context,
+        playlistId: Long,
+        from: Int,
+        to: Int,
+        songsAfter: List<Song>,
+    ) {
+        val uris = songsAfter.map { it.data }
+        spotifyEdit(context, null) { spotifyEditor.move(playlistId, from, to, uris) }
+    }
+
+    /** Likes every Spotify track in [songs] (an album's or artist's songs, a selection...). */
+    fun addToLikedSongs(context: Context, songs: List<Song>) {
+        val uris = songs.map { it.data }.filter { SpotifyIds.isTrackUri(it) }.distinct()
+        if (uris.isEmpty()) return
+        val appContext = context.applicationContext
+        val message = appContext.resources.getQuantityString(R.plurals.spotify_added_to_liked_songs, uris.size, uris.size)
+        spotifyEdit(appContext, message) {
+            spotifySync.setLiked(uris, true).also { liked ->
+                // Lets the player's heart button pick up the change.
+                if (liked) LocalBroadcastManager.getInstance(appContext)
+                    .sendBroadcast(Intent(MusicService.FAVORITE_STATE_CHANGED))
+            }
+        }
+    }
+
+    private fun spotifyEdit(context: Context, successMessage: String?, edit: suspend () -> Boolean) {
+        val appContext = context.applicationContext
+        viewModelScope.launch(IO) {
+            val ok = edit()
+            forceReload(Playlists)
+            withContext(Main) {
+                when {
+                    !ok -> appContext.showToast(R.string.spotify_playlist_edit_failed)
+                    successMessage != null -> appContext.showToast(successMessage)
+                }
+            }
+        }
     }
 
     fun albumById(id: Long) = repository.albumById(id)
@@ -360,6 +499,7 @@ class LibraryViewModel(
     fun clearSearchResult() {
         searchRequestId.incrementAndGet()
         searchResults.value = emptyList()
+        searchLoading.value = false
     }
 
     fun addToPlaylist(context: Context, playlistName: String, songs: List<Song>) {

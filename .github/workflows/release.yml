@@ -27,5 +27,4 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            app/build/outputs/apk/fdroid/release/app-fdroid-release.apk
-            app/build/outputs/apk/normal/release/app-normal-release.apk
+            app/build/outputs/apk/release/app-release.apk

@@ -14,19 +14,42 @@
 package code.name.monkey.retromusic.views
 
 import android.content.Context
-import android.content.res.Configuration
+import android.os.Build
 import android.util.AttributeSet
+import android.view.ViewStructure
 import android.webkit.WebView
+import androidx.annotation.RequiresApi
 
+/**
+ * A WebView that bypasses some common crashes and bugs.
+ *
+ * Originally named LollipopFixedWebView to address a resource bug in Android 5.0/5.1.
+ * Since the app's minSdk is now 24, the Lollipop-specific fix is removed to avoid
+ * breaking InputMethodManager (IME) functionality.
+ */
 class LollipopFixedWebView @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-    defStyleAttr: Int = -1
-) : WebView(getFixedContext(context), attrs, defStyleAttr){
+    defStyleAttr: Int = android.R.attr.webViewStyle
+) : WebView(context, attrs, defStyleAttr) {
 
-    companion object {
-        fun getFixedContext(context: Context): Context {
-            return context.createConfigurationContext(Configuration())
-        }
+    init {
+        isFocusable = true
+        isFocusableInTouchMode = true
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    override fun onProvideAutofillVirtualStructure(structure: ViewStructure?, flags: Int) {
+        // By not calling super, we prevent the WebView from providing a virtual structure to the
+        // Autofill service, which is known to cause NullPointerExceptions in cr_AutofillHintsService
+        // on some Android versions. We don't change importantForAutofill or getAutofillType
+        // to ensure the keyboard (IME) continues to function correctly.
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    override fun getAutofillHints(): Array<String> {
+        // Return an empty array instead of null to prevent "Attempt to get length of null array"
+        // crashes in the system Autofill service.
+        return arrayOf()
     }
 }

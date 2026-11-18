@@ -14,6 +14,7 @@
 
 package code.name.monkey.retromusic.util
 
+import code.name.monkey.retromusic.extensions.applyColor
 import android.content.res.ColorStateList
 import android.content.res.Resources
 import android.graphics.drawable.LayerDrawable
@@ -31,6 +32,10 @@ object ViewUtil {
     const val RETRO_MUSIC_ANIM_TIME = 1000
 
     fun setProgressDrawable(progressSlider: SeekBar, newColor: Int, thumbTint: Boolean = false) {
+        if (PreferenceUtil.squigglyProgress) {
+            progressSlider.applyColor(newColor)
+            return
+        }
         if (thumbTint) {
             progressSlider.thumbTintList = ColorStateList.valueOf(newColor)
         }

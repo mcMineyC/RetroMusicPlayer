@@ -47,6 +47,14 @@ class PlaylistsFragment :
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        // The column count can change in Settings (three-column playlists).
+        if (!RetroUtil.isLandscape && PreferenceUtil.playlistGridSize != getGridSize()) {
+            setAndSaveGridSize(PreferenceUtil.playlistGridSize)
+        }
+    }
+
     override val titleRes: Int
         get() = R.string.playlists
 
@@ -80,6 +88,10 @@ class PlaylistsFragment :
         menu.removeItem(R.id.action_layout_type)
         menu.add(0, R.id.action_add_to_playlist, 0, R.string.new_playlist_title)
         menu.add(0, R.id.action_import_playlist, 0, R.string.import_playlist)
+        menu.add(0, R.id.action_show_favorite_playlists, 0, R.string.action_show_favorite_playlists).apply {
+            isCheckable = true
+            isChecked = PreferenceUtil.showOnlyFavoritePlaylists
+        }
         menu.findItem(R.id.action_settings).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER)
         setUpSortOrderMenu(menu.findItem(R.id.action_sort_order).subMenu!!)
         MenuCompat.setGroupDividerEnabled(menu, true)
@@ -88,6 +100,13 @@ class PlaylistsFragment :
     }
 
     override fun onMenuItemSelected(item: MenuItem): Boolean {
+        if (item.itemId == R.id.action_show_favorite_playlists) {
+            val showOnly = !PreferenceUtil.showOnlyFavoritePlaylists
+            PreferenceUtil.showOnlyFavoritePlaylists = showOnly
+            item.isChecked = showOnly
+            libraryViewModel.forceReload(ReloadType.Playlists)
+            return true
+        }
         if (handleGridSizeMenuItem(item)) {
             return true
         }

@@ -17,6 +17,8 @@ package code.name.monkey.retromusic.glide
 import android.content.Context
 import android.graphics.Bitmap
 import code.name.monkey.retromusic.glide.artistimage.ArtistImage
+import code.name.monkey.retromusic.glide.artistimage.SpotifyArtistImage
+import code.name.monkey.retromusic.glide.artistimage.SpotifyArtistImageLoader
 import code.name.monkey.retromusic.glide.artistimage.Factory
 import code.name.monkey.retromusic.glide.audiocover.AudioFileCover
 import code.name.monkey.retromusic.glide.audiocover.AudioFileCoverLoader
@@ -44,6 +46,11 @@ class RetroMusicGlideModule : AppGlideModule() {
             AudioFileCoverLoader.Factory()
         )
         registry.prepend(ArtistImage::class.java, InputStream::class.java, Factory(context))
+        registry.prepend(
+            SpotifyArtistImage::class.java,
+            InputStream::class.java,
+            SpotifyArtistImageLoader.Factory()
+        )
         registry.register(
             Bitmap::class.java,
             BitmapPaletteWrapper::class.java, BitmapPaletteTranscoder()

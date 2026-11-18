@@ -51,6 +51,17 @@ public class AudioFileCoverUtils {
     } catch (ReadOnlyFileException | InvalidAudioFrameException | TagException | IOException | CannotReadException ignored) {
     }
 
+    // Method 1b: other formats (Ogg/Opus METADATA_BLOCK_PICTURE, FLAC, MP4) through jaudiotagger
+    try {
+      org.jaudiotagger.tag.Tag tag = org.jaudiotagger.audio.AudioFileIO.read(new File(path)).getTag();
+      Artwork art = tag != null ? tag.getFirstArtwork() : null;
+      if (art != null && art.getBinaryData() != null) {
+        return new ByteArrayInputStream(art.getBinaryData());
+      }
+    } catch (Exception ignored) {
+      // Unsupported or unreadable; try the folder images below
+    }
+
     // Method 2: look for album art in external files
     final File parent = new File(path).getParentFile();
     for (String fallback : FALLBACKS) {

@@ -1,9 +1,13 @@
 package code.name.monkey.retromusic
 
 import androidx.room.Room
+import code.name.monkey.retromusic.cast.NoRemotePlaybackFactory
+import code.name.monkey.retromusic.cast.RemotePlaybackFactory
 import code.name.monkey.retromusic.auto.AutoMusicProvider
-import code.name.monkey.retromusic.cast.RetroWebServer
 import code.name.monkey.retromusic.db.MIGRATION_23_24
+import code.name.monkey.retromusic.db.MIGRATION_24_25
+import code.name.monkey.retromusic.db.MIGRATION_25_26
+import code.name.monkey.retromusic.db.MIGRATION_26_27
 import code.name.monkey.retromusic.db.RetroDatabase
 import code.name.monkey.retromusic.fragments.LibraryViewModel
 import code.name.monkey.retromusic.fragments.albums.AlbumDetailsViewModel
@@ -16,6 +20,10 @@ import code.name.monkey.retromusic.network.provideLastFmRest
 import code.name.monkey.retromusic.network.provideLastFmRetrofit
 import code.name.monkey.retromusic.network.provideOkHttp
 import code.name.monkey.retromusic.repository.*
+import code.name.monkey.retromusic.spotify.LibrespotEngine
+import code.name.monkey.retromusic.spotify.SpotifySavedTrackIndex
+import code.name.monkey.retromusic.spotify.SpotifyLibrarySync
+import code.name.monkey.retromusic.spotify.SpotifyPlaylistEditor
 import org.koin.android.ext.koin.androidContext
 import org.koin.androidx.viewmodel.dsl.viewModel
 import org.koin.dsl.bind
@@ -41,7 +49,7 @@ private val roomModule = module {
 
     single {
         Room.databaseBuilder(androidContext(), RetroDatabase::class.java, "playlist.db")
-            .addMigrations(MIGRATION_23_24)
+            .addMigrations(MIGRATION_23_24, MIGRATION_24_25, MIGRATION_25_26, MIGRATION_26_27)
             .build()
     }
 
@@ -55,6 +63,10 @@ private val roomModule = module {
 
     factory {
         get<RetroDatabase>().historyDao()
+    }
+
+    factory {
+        get<RetroDatabase>().spotifyDao()
     }
 
     single {
@@ -78,8 +90,22 @@ private val mainModule = module {
     single {
         androidContext().contentResolver
     }
+    // Replace with your own implementation to play on remote routes.
+    single<RemotePlaybackFactory> {
+        NoRemotePlaybackFactory
+    }
+    // Spotify mode (go-librespot). One engine per process; see spotify/LibrespotEngine.
     single {
-        RetroWebServer(get())
+        LibrespotEngine(androidContext())
+    }
+    single {
+        SpotifyLibrarySync(androidContext(), get(), get()).apply {
+            val spotifyRepository = get<SpotifyRepository>()
+            onCacheChanged = { spotifyRepository.invalidate() }
+        }
+    }
+    single {
+        SpotifyPlaylistEditor(get(), get(), get())
     }
 }
 private val dataModule = module {
@@ -97,8 +123,17 @@ private val dataModule = module {
             get(),
             get(),
             get(),
+            get(),
         )
     } bind Repository::class
+
+    single {
+        SpotifyRepository(get(), get(), get(), get(), get())
+    }
+
+    single {
+        SpotifySavedTrackIndex(get(), get())
+    }
 
     single {
         RealSongRepository(get())
@@ -149,7 +184,7 @@ private val dataModule = module {
 private val viewModules = module {
 
     viewModel {
-        LibraryViewModel(get())
+        LibraryViewModel(get(), get(), get())
     }
 
     viewModel { (albumId: Long) ->

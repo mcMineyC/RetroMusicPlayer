@@ -10,6 +10,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.RecyclerView
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.databinding.NumberRollViewBinding
+import code.name.monkey.retromusic.helper.menu.setUpLikedSongsAction
 import code.name.monkey.retromusic.views.NumberRollView
 
 abstract class AbsMultiSelectAdapter<V : RecyclerView.ViewHolder?, I>(
@@ -22,6 +23,7 @@ abstract class AbsMultiSelectAdapter<V : RecyclerView.ViewHolder?, I>(
     override fun onCreateActionMode(mode: ActionMode?, menu: Menu?): Boolean {
         val inflater = mode?.menuInflater
         inflater?.inflate(menuRes, menu)
+        menu?.setUpLikedSongsAction()
         return true
     }
 

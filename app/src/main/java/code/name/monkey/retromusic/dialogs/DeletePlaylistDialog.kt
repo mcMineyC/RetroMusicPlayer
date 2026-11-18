@@ -26,7 +26,6 @@ import code.name.monkey.retromusic.extensions.colorButtons
 import code.name.monkey.retromusic.extensions.extraNotNull
 import code.name.monkey.retromusic.extensions.materialDialog
 import code.name.monkey.retromusic.fragments.LibraryViewModel
-import code.name.monkey.retromusic.fragments.ReloadType
 import org.koin.androidx.viewmodel.ext.android.activityViewModel
 
 class DeletePlaylistDialog : DialogFragment() {
@@ -69,9 +68,7 @@ class DeletePlaylistDialog : DialogFragment() {
             .setMessage(message)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.action_delete) { _, _ ->
-                libraryViewModel.deleteSongsFromPlaylist(playlists)
-                libraryViewModel.deleteRoomPlaylist(playlists)
-                libraryViewModel.forceReload(ReloadType.Playlists)
+                libraryViewModel.deletePlaylists(requireContext(), playlists)
             }
             .create()
             .colorButtons()

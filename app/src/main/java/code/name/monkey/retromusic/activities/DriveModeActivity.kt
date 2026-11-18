@@ -23,7 +23,6 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.activities.base.AbsMusicServiceActivity
 import code.name.monkey.retromusic.databinding.ActivityDriveModeBinding
-import code.name.monkey.retromusic.db.toSongEntity
 import code.name.monkey.retromusic.extensions.accentColor
 import code.name.monkey.retromusic.extensions.drawAboveSystemBars
 import code.name.monkey.retromusic.glide.BlurTransformation
@@ -34,7 +33,6 @@ import code.name.monkey.retromusic.helper.MusicProgressViewUpdateHelper
 import code.name.monkey.retromusic.helper.MusicProgressViewUpdateHelper.Callback
 import code.name.monkey.retromusic.helper.PlayPauseButtonOnClickHandler
 import code.name.monkey.retromusic.model.Song
-import code.name.monkey.retromusic.repository.RealRepository
 import code.name.monkey.retromusic.service.MusicService
 import code.name.monkey.retromusic.util.MusicUtil
 import com.bumptech.glide.Glide
@@ -42,7 +40,6 @@ import com.google.android.material.slider.Slider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.koin.android.ext.android.inject
 
 
 /**
@@ -55,7 +52,6 @@ class DriveModeActivity : AbsMusicServiceActivity(), Callback {
     private var lastPlaybackControlsColor: Int = Color.GRAY
     private var lastDisabledPlaybackControlsColor: Int = Color.GRAY
     private lateinit var progressViewUpdateHelper: MusicProgressViewUpdateHelper
-    private val repository: RealRepository by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,14 +84,7 @@ class DriveModeActivity : AbsMusicServiceActivity(), Callback {
 
     private fun toggleFavorite(song: Song) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val playlist = repository.favoritePlaylist()
-            val songEntity = song.toSongEntity(playlist.playListId)
-            val isFavorite = repository.isSongFavorite(song.id)
-            if (isFavorite) {
-                repository.removeSongFromPlaylist(songEntity)
-            } else {
-                repository.insertSongs(listOf(song.toSongEntity(playlist.playListId)))
-            }
+            MusicUtil.toggleFavorite(song)
             LocalBroadcastManager.getInstance(this@DriveModeActivity)
                 .sendBroadcast(Intent(MusicService.FAVORITE_STATE_CHANGED))
         }
@@ -103,8 +92,7 @@ class DriveModeActivity : AbsMusicServiceActivity(), Callback {
 
     private fun updateFavorite() {
         lifecycleScope.launch(Dispatchers.IO) {
-            val isFavorite: Boolean =
-                repository.isSongFavorite(MusicPlayerRemote.currentSong.id)
+            val isFavorite: Boolean = MusicUtil.isFavorite(MusicPlayerRemote.currentSong)
             withContext(Dispatchers.Main) {
                 binding.songFavourite.setImageResource(if (isFavorite) R.drawable.ic_favorite else R.drawable.ic_favorite_border)
             }

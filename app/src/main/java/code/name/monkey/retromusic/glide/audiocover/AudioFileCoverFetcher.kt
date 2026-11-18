@@ -18,13 +18,18 @@ import com.bumptech.glide.Priority
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.data.DataFetcher
 import java.io.ByteArrayInputStream
-import java.io.FileNotFoundException
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 
 class AudioFileCoverFetcher(private val model: AudioFileCover) : DataFetcher<InputStream> {
     private var stream: InputStream? = null
     override fun loadData(priority: Priority, callback: DataFetcher.DataCallback<in InputStream>) {
+        if (model.filePath.isEmpty() || !File(model.filePath).exists()) {
+            callback.onLoadFailed(IOException("File does not exist: ${model.filePath}"))
+            return
+        }
+
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(model.filePath)
@@ -35,10 +40,14 @@ class AudioFileCoverFetcher(private val model: AudioFileCover) : DataFetcher<Inp
                 AudioFileCoverUtils.fallback(model.filePath)
             }
             callback.onDataReady(stream)
-        } catch (e: FileNotFoundException) {
+        } catch (e: Exception) {
             callback.onLoadFailed(e)
         } finally {
-            retriever.release()
+            try {
+                retriever.release()
+            } catch (e: Exception) {
+                // ignore
+            }
         }
     }
 

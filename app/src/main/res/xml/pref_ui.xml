@@ -68,6 +68,13 @@
             android:title="@string/pref_title_remember_tab" />
 
         <code.name.monkey.appthemehelper.common.prefs.supportv7.ATESwitchPreference
+            android:key="playlist_three_columns"
+            android:layout="@layout/list_item_view_switch"
+            android:persistent="false"
+            android:summary="@string/pref_summary_playlist_three_columns"
+            android:title="@string/pref_title_playlist_three_columns" />
+
+        <code.name.monkey.appthemehelper.common.prefs.supportv7.ATESwitchPreference
             android:defaultValue="true"
             android:key="enable_search_playlist"
             android:layout="@layout/list_item_view_switch"

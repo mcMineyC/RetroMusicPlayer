@@ -77,3 +77,6 @@
 -keep class com.google.gson.reflect.TypeToken
 -keep class * extends com.google.gson.reflect.TypeToken
 -keep public class * implements java.lang.reflect.Type
+# go-librespot gomobile binding (JNI looks these up by name)
+-keep class mobilebind.** { *; }
+-keep class go.** { *; }

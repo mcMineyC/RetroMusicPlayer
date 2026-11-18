@@ -26,6 +26,8 @@ import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.model.lyrics.AbsSynchronizedLyrics
 import code.name.monkey.retromusic.repository.Repository
 import code.name.monkey.retromusic.repository.SongRepository
+import code.name.monkey.retromusic.spotify.SpotifyIds
+import code.name.monkey.retromusic.spotify.SpotifyLibrarySync
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.withContext
@@ -115,6 +117,7 @@ object MusicUtil : KoinComponent {
     }
 
     fun deleteAlbumArt(context: Context, albumId: Long) {
+        if (albumId < 0) return
         val contentResolver = context.contentResolver
         val localUri = "content://media/external/audio/albumart".toUri()
         contentResolver.delete(ContentUris.withAppendedId(localUri, albumId), null, null)
@@ -206,6 +209,9 @@ object MusicUtil : KoinComponent {
 
     @JvmStatic
     fun getMediaStoreAlbumCoverUri(albumId: Long): Uri {
+        if (albumId < 0) {
+            return Uri.EMPTY
+        }
         val sArtworkUri = "content://media/external/audio/albumart".toUri()
         return ContentUris.withAppendedId(sArtworkUri, albumId)
     }
@@ -327,6 +333,7 @@ object MusicUtil : KoinComponent {
         albumId: Long,
         path: String?
     ) {
+        if (albumId < 0) return
         val contentResolver = context.contentResolver
         val artworkUri = "content://media/external/audio/albumart".toUri()
         contentResolver.delete(ContentUris.withAppendedId(artworkUri, albumId), null, null)
@@ -367,6 +374,14 @@ object MusicUtil : KoinComponent {
 
     private val repository = get<Repository>()
     suspend fun toggleFavorite(song: Song) {
+        if (isSpotifyLikeable(song)) {
+            // In Spotify mode the heart maps to Liked Songs.
+            withContext(IO) {
+                val sync = get<SpotifyLibrarySync>()
+                sync.setLiked(listOf(song.data), !sync.isLiked(song.data))
+            }
+            return
+        }
         withContext(IO) {
             val playlist: PlaylistEntity = repository.favoritePlaylist()
             val songEntity = song.toSongEntity(playlist.playListId)
@@ -379,7 +394,15 @@ object MusicUtil : KoinComponent {
         }
     }
 
-    suspend fun isFavorite(song: Song) = repository.isSongFavorite(song.id)
+    suspend fun isFavorite(song: Song): Boolean =
+        if (isSpotifyLikeable(song)) {
+            withContext(IO) { get<SpotifyLibrarySync>().isLiked(song.data) }
+        } else {
+            repository.isSongFavorite(song.id)
+        }
+
+    private fun isSpotifyLikeable(song: Song): Boolean =
+        PreferenceUtil.isSpotifyMode && SpotifyIds.isTrackUri(song.data)
 
     fun deleteTracks(
         activity: FragmentActivity,

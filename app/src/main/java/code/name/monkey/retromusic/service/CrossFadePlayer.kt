@@ -51,6 +51,14 @@ class CrossFadePlayer(context: Context) : AudioManagerPlayback(context),
     private var crossFadeDuration = PreferenceUtil.crossFadeDuration
     var isCrossFading = false
 
+    /** ReplayGain factor per MediaPlayer (the two players hold different songs mid-crossfade). */
+    private val replayGains = java.util.concurrent.ConcurrentHashMap<MediaPlayer, Float>()
+
+    /** Volume requested by fades/ducking, before ReplayGain. */
+    private var requestedVolume = 1f
+
+    private fun gainOf(player: MediaPlayer): Float = replayGains[player] ?: 1f
+
     init {
         player1.setWakeMode(context, PowerManager.PARTIAL_WAKE_LOCK)
         player2.setWakeMode(context, PowerManager.PARTIAL_WAKE_LOCK)
@@ -120,8 +128,9 @@ class CrossFadePlayer(context: Context) : AudioManagerPlayback(context),
 
     override fun setVolume(vol: Float): Boolean {
         cancelFade()
+        requestedVolume = vol
         return try {
-            getCurrentPlayer()?.setVolume(vol, vol)
+            getCurrentPlayer()?.let { val v = vol * gainOf(it); it.setVolume(v, v) }
             true
         } catch (e: IllegalStateException) {
             e.printStackTrace()
@@ -251,7 +260,12 @@ class CrossFadePlayer(context: Context) : AudioManagerPlayback(context),
 
     private fun crossFade(fadeInMp: MediaPlayer, fadeOutMp: MediaPlayer) {
         isCrossFading = true
-        crossFadeAnimator = createFadeAnimator(context, fadeInMp, fadeOutMp) {
+        requestedVolume = 1f
+        crossFadeAnimator = createFadeAnimator(
+            context, fadeInMp, fadeOutMp,
+            fadeInGain = { gainOf(fadeInMp) },
+            fadeOutGain = { gainOf(fadeOutMp) },
+        ) {
             crossFadeAnimator = null
             durationListener.start()
             isCrossFading = false
@@ -282,6 +296,7 @@ class CrossFadePlayer(context: Context) : AudioManagerPlayback(context),
     override fun onError(mp: MediaPlayer?, what: Int, extra: Int): Boolean {
         mIsInitialized = false
         mp?.release()
+        replayGains.clear()
         player1 = MediaPlayer()
         player2 = MediaPlayer()
         mIsInitialized = true
@@ -325,6 +340,8 @@ class CrossFadePlayer(context: Context) : AudioManagerPlayback(context),
                 // And MusicPlayerRemote don't have access to MusicService
                 if (nextSong != null && nextSong != Song.emptySong) {
                     nextDataSource = null
+                    // Prefetched when the service prepared the next song; unity if not ready.
+                    replayGains[player] = ReplayGain.cachedFactor(nextSong) ?: 1f
                     setDataSourceImpl(player, nextSong.uri.toString()) { success ->
                         if (success) switchPlayer()
                     }
@@ -332,6 +349,7 @@ class CrossFadePlayer(context: Context) : AudioManagerPlayback(context),
                 }
                 // So we have to use the previously stored nextDataSource value
                 else if (!nextDataSource.isNullOrEmpty()) {
+                    replayGains[player] = 1f
                     setDataSourceImpl(player, nextDataSource!!) { success ->
                         if (success) switchPlayer()
                         nextDataSource = null
@@ -351,6 +369,19 @@ class CrossFadePlayer(context: Context) : AudioManagerPlayback(context),
                 CurrentPlayer.PLAYER_ONE
             }
         callbacks?.onTrackEndedWithCrossfade()
+    }
+
+    override fun setReplayGain(factor: Float) {
+        val player = getCurrentPlayer() ?: return
+        replayGains[player] = factor
+        // Mid-crossfade the animator owns the volumes and already uses this factor next frame.
+        if (isCrossFading) return
+        try {
+            val v = requestedVolume * factor
+            player.setVolume(v, v)
+        } catch (e: IllegalStateException) {
+            e.printStackTrace()
+        }
     }
 
     override fun setCrossFadeDuration(duration: Int) {

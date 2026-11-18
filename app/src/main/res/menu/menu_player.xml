@@ -78,6 +78,12 @@
         android:orderInCategory="10"
         android:title="@string/action_details" />
     <item
+        android:id="@+id/action_spotify_ogg_dump"
+        android:checkable="true"
+        android:orderInCategory="10"
+        android:title="@string/pref_title_spotify_ogg_dump"
+        android:visible="false" />
+    <item
         android:id="@+id/action_go_to_lyrics"
         android:orderInCategory="11"
         android:title="@string/action_go_to_lyrics" />

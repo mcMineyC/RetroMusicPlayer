@@ -33,8 +33,8 @@ import code.name.monkey.retromusic.db.PlaylistEntity
 import code.name.monkey.retromusic.db.PlaylistWithSongs
 import code.name.monkey.retromusic.db.toSongs
 import code.name.monkey.retromusic.extensions.dipToPix
+import code.name.monkey.retromusic.glide.RetroGlideExtension
 import code.name.monkey.retromusic.glide.RetroGlideExtension.playlistOptions
-import code.name.monkey.retromusic.glide.playlistPreview.PlaylistPreview
 import code.name.monkey.retromusic.helper.SortOrder.PlaylistSortOrder
 import code.name.monkey.retromusic.helper.menu.PlaylistMenuHelper
 import code.name.monkey.retromusic.helper.menu.SongsMenuHelper
@@ -42,6 +42,7 @@ import code.name.monkey.retromusic.interfaces.IPlaylistClickListener
 import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.PreferenceUtil
+import code.name.monkey.retromusic.spotify.SpotifyPlaylistInfo
 import com.bumptech.glide.Glide
 import me.zhanghai.android.fastscroll.PopupTextProvider
 
@@ -107,7 +108,7 @@ class PlaylistAdapter(
             holder.image?.setImageDrawable(getIconRes())
         } else {
             Glide.with(activity)
-                .load(PlaylistPreview(playlist))
+                .load(RetroGlideExtension.getPlaylistModel(playlist))
                 .playlistOptions()
                 .into(holder.image!!)
         }
@@ -154,6 +155,11 @@ class PlaylistAdapter(
             menu?.setOnClickListener { view ->
                 val popupMenu = PopupMenu(activity, view)
                 popupMenu.inflate(R.menu.menu_item_playlist)
+                val playlistId = dataSet[layoutPosition].playlistEntity.playListId
+                popupMenu.menu.findItem(R.id.action_favorite_playlist)?.isChecked =
+                    PreferenceUtil.isFavoritePlaylist(playlistId)
+                popupMenu.menu.findItem(R.id.action_save_offline_m3u)?.isVisible =
+                    SpotifyPlaylistInfo.isSpotifyPlaylist(playlistId)
                 popupMenu.setOnMenuItemClickListener { item ->
                     PlaylistMenuHelper.handleMenuClick(activity, dataSet[layoutPosition], item)
                 }

@@ -9,12 +9,18 @@ import code.name.monkey.retromusic.App.Companion.getContext
 import code.name.monkey.retromusic.Constants.USER_BANNER
 import code.name.monkey.retromusic.Constants.USER_PROFILE
 import code.name.monkey.retromusic.R
+import code.name.monkey.retromusic.db.PlaylistWithSongs
 import code.name.monkey.retromusic.extensions.accentColor
 import code.name.monkey.retromusic.glide.artistimage.ArtistImage
+import code.name.monkey.retromusic.glide.artistimage.SpotifyArtistImage
 import code.name.monkey.retromusic.glide.audiocover.AudioFileCover
 import code.name.monkey.retromusic.glide.palette.BitmapPaletteWrapper
+import code.name.monkey.retromusic.glide.playlistPreview.PlaylistPreview
 import code.name.monkey.retromusic.model.Artist
 import code.name.monkey.retromusic.model.Song
+import code.name.monkey.retromusic.spotify.SpotifyArtwork
+import code.name.monkey.retromusic.spotify.SpotifyIds
+import code.name.monkey.retromusic.spotify.SpotifySavedTracks
 import code.name.monkey.retromusic.util.ArtistSignatureUtil
 import code.name.monkey.retromusic.util.CustomArtistImageUtil.Companion.getFile
 import code.name.monkey.retromusic.util.CustomArtistImageUtil.Companion.getInstance
@@ -66,6 +72,12 @@ object RetroGlideExtension {
     }
 
     fun getSongModel(song: Song): Any {
+        if (SpotifyIds.isSpotifyUri(song.data)) {
+            // A saved Ogg file carries the cover; read it from disk instead of the network.
+            SpotifySavedTracks.forUri(song.data)?.let { return AudioFileCover(it.path) }
+            // A missing URL falls back to a MediaStore URI that fails to the default art.
+            return SpotifyArtwork.albumUrl(song.albumId) ?: getMediaStoreAlbumCoverUri(song.albumId)
+        }
         return getSongModel(song, PreferenceUtil.isIgnoreMediaStoreArtwork)
     }
 
@@ -91,7 +103,13 @@ object RetroGlideExtension {
         forceDownload: Boolean
     ): Any {
         return if (!hasCustomImage) {
-            ArtistImage(artist)
+            if (PreferenceUtil.isSpotifyMode && artist.id < 0) {
+                // Spotify artists (negative IDs) get Spotify portraits, never a Deezer lookup.
+                SpotifyArtwork.artistUrl(artist.id)
+                    ?: SpotifyArtistImage(artist.id, artist.safeGetFirstAlbum().id)
+            } else {
+                ArtistImage(artist)
+            }
         } else {
             getFile(artist)
         }
@@ -108,10 +126,14 @@ object RetroGlideExtension {
             .signature(createSignature(artist))
     }
 
+    /** Local covers are cheap to re-read; Spotify covers come over the network, so cache them. */
+    private fun diskCacheStrategyFor(song: Song): DiskCacheStrategy =
+        if (SpotifyIds.isSpotifyUri(song.data)) DiskCacheStrategy.AUTOMATIC else DEFAULT_DISK_CACHE_STRATEGY
+
     fun <T> RequestBuilder<T>.songCoverOptions(
         song: Song
     ): RequestBuilder<T> {
-        return diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
+        return diskCacheStrategy(diskCacheStrategyFor(song))
             .error(getDrawable(DEFAULT_SONG_IMAGE))
             .placeholder(getDrawable(DEFAULT_SONG_IMAGE))
             .signature(createSignature(song))
@@ -120,14 +142,14 @@ object RetroGlideExtension {
     fun <T> RequestBuilder<T>.simpleSongCoverOptions(
         song: Song
     ): RequestBuilder<T> {
-        return diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
+        return diskCacheStrategy(diskCacheStrategyFor(song))
             .signature(createSignature(song))
     }
 
     fun <T> RequestBuilder<T>.albumCoverOptions(
         song: Song
     ): RequestBuilder<T> {
-        return diskCacheStrategy(DEFAULT_DISK_CACHE_STRATEGY)
+        return diskCacheStrategy(diskCacheStrategyFor(song))
             .error(ContextCompat.getDrawable(getContext(), DEFAULT_ALBUM_IMAGE))
             .placeholder(ContextCompat.getDrawable(getContext(), DEFAULT_ALBUM_IMAGE))
             .signature(createSignature(song))
@@ -150,6 +172,19 @@ object RetroGlideExtension {
             .error(DEFAULT_ERROR_IMAGE_BANNER)
             .signature(createSignature(file))
     }
+
+    /**
+     * A Spotify library playlist has its own cover; everything else gets the generated
+     * collage of its songs' album art.
+     */
+    fun getPlaylistModel(playlist: PlaylistWithSongs): Any {
+        val id = playlist.playlistEntity.playListId
+        // Spotify sends no image for Liked Songs, so it gets a fixed cover like in Spotify.
+        if (id == LIKED_SONGS_ID) return R.drawable.spotify_liked_songs_cover
+        return SpotifyArtwork.playlistUrl(id) ?: PlaylistPreview(playlist)
+    }
+
+    private val LIKED_SONGS_ID = SpotifyIds.localId(SpotifyIds.COLLECTION_URI)
 
     fun <T> RequestBuilder<T>.playlistOptions(): RequestBuilder<T> {
         return diskCacheStrategy(DiskCacheStrategy.AUTOMATIC)

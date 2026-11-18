@@ -46,14 +46,34 @@ import org.koin.androidx.viewmodel.ext.android.getViewModel
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.get
 import java.io.File
+import code.name.monkey.retromusic.extensions.showToast
+import code.name.monkey.retromusic.spotify.SpotifyIds
 
 object SongMenuHelper : KoinComponent {
     val MENU_RES
         get() = R.menu.menu_item_song
 
+    /** Actions that need a file on the device, so they do not apply to Spotify songs. */
+    val FILE_ONLY_ACTIONS = setOf(
+        R.id.action_set_as_ringtone,
+        R.id.action_share,
+        R.id.action_delete_from_device,
+        R.id.action_tag_editor,
+        R.id.action_details,
+        R.id.action_add_to_blacklist,
+    )
+
     fun handleMenuClick(activity: FragmentActivity, song: Song, menuItemId: Int): Boolean {
         val libraryViewModel = activity.getViewModel() as LibraryViewModel
+        if (SpotifyIds.isSpotifyUri(song.data) && menuItemId in FILE_ONLY_ACTIONS) {
+            activity.showToast(R.string.spotify_file_action_unavailable)
+            return true
+        }
         when (menuItemId) {
+            R.id.action_add_to_liked_songs -> {
+                libraryViewModel.addToLikedSongs(activity, listOf(song))
+                return true
+            }
             R.id.action_set_as_ringtone -> {
                 if (RingtoneManager.requiresDialog(activity)) {
                     RingtoneManager.showDialog(activity)
@@ -142,6 +162,7 @@ object SongMenuHelper : KoinComponent {
         override fun onClick(v: View) {
             val popupMenu = PopupMenu(activity, v)
             popupMenu.inflate(menuRes)
+            popupMenu.menu.setUpLikedSongsAction()
             popupMenu.setOnMenuItemClickListener(this)
             popupMenu.show()
         }

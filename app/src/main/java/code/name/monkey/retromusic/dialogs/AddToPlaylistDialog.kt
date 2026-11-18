@@ -62,7 +62,8 @@ class AddToPlaylistDialog : DialogFragment() {
                 if (which == 0) {
                     showCreateDialog(songs)
                 } else {
-                    libraryViewModel.addToPlaylist(requireContext(), playlistNames[which], songs)
+                    // By entity, not name: Spotify and Retro playlists can share a name.
+                    libraryViewModel.addToPlaylist(requireContext(), playlistEntities[which - 1], songs)
                 }
                 dialog.dismiss()
             }

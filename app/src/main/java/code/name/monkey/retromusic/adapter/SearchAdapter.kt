@@ -39,6 +39,7 @@ import code.name.monkey.retromusic.model.Album
 import code.name.monkey.retromusic.model.Artist
 import code.name.monkey.retromusic.model.Genre
 import code.name.monkey.retromusic.model.Song
+import code.name.monkey.retromusic.spotify.SpotifyRemoteCatalog
 import code.name.monkey.retromusic.util.MusicUtil
 import com.bumptech.glide.Glide
 import java.util.*
@@ -103,7 +104,9 @@ class SearchAdapter(
                 holder.imageTextContainer?.isVisible = true
                 val artist = dataSet[position] as Artist
                 holder.title?.text = artist.name
-                holder.text?.text = MusicUtil.getArtistInfoString(activity, artist)
+                // Spotify search artists carry one placeholder song, so a song count would be wrong.
+                holder.text?.text = SpotifyRemoteCatalog.description(artist.id)
+                    ?: MusicUtil.getArtistInfoString(activity, artist)
                 Glide.with(activity).asDrawable().artistImageOptions(artist).load(
                     RetroGlideExtension.getArtistModel(artist)
                 ).into(holder.image!!)

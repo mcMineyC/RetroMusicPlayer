@@ -61,6 +61,15 @@
             app:settingListItemTitle="@string/pref_header_images" />
 
         <code.name.monkey.retromusic.views.SettingListItemView
+            android:id="@+id/spotifySettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:settingListItemIcon="@drawable/ic_library_music"
+            app:settingListItemIconColor="@color/md_green_A700"
+            app:settingListItemText="@string/spotify_settings_summary"
+            app:settingListItemTitle="@string/spotify" />
+
+        <code.name.monkey.retromusic.views.SettingListItemView
             android:id="@+id/otherSettings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

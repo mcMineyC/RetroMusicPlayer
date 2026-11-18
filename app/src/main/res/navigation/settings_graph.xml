@@ -43,6 +43,14 @@
             app:popExitAnim="@anim/retro_fragment_close_exit" />
 
         <action
+            android:id="@+id/action_mainSettingsFragment_to_spotifySettingsFragment"
+            app:destination="@id/spotifySettingsFragment"
+            app:enterAnim="@anim/retro_fragment_open_enter"
+            app:exitAnim="@anim/retro_fragment_open_exit"
+            app:popEnterAnim="@anim/retro_fragment_close_enter"
+            app:popExitAnim="@anim/retro_fragment_close_exit" />
+
+        <action
             android:id="@+id/action_mainSettingsFragment_to_otherSettingsFragment"
             app:destination="@id/otherSettingsFragment"
             app:enterAnim="@anim/retro_fragment_open_enter"
@@ -91,6 +99,11 @@
         android:id="@+id/nowPlayingSettingsFragment"
         android:name="code.name.monkey.retromusic.fragments.settings.NowPlayingSettingsFragment"
         android:label="Now Playing" />
+
+    <fragment
+        android:id="@+id/spotifySettingsFragment"
+        android:name="code.name.monkey.retromusic.fragments.settings.SpotifySettingsFragment"
+        android:label="Spotify" />
 
     <fragment
         android:id="@+id/otherSettingsFragment"

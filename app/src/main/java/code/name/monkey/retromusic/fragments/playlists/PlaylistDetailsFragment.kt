@@ -9,7 +9,9 @@ import android.view.View
 import androidx.core.view.doOnPreDraw
 import androidx.core.view.isVisible
 import androidx.core.widget.addTextChangedListener
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -24,11 +26,13 @@ import code.name.monkey.retromusic.extensions.elevatedAccentColor
 import code.name.monkey.retromusic.extensions.surfaceColor
 import code.name.monkey.retromusic.fragments.base.AbsMainActivityFragment
 import code.name.monkey.retromusic.fragments.search.clearText
+import code.name.monkey.retromusic.glide.RetroGlideExtension
 import code.name.monkey.retromusic.glide.RetroGlideExtension.playlistOptions
-import code.name.monkey.retromusic.glide.playlistPreview.PlaylistPreview
 import code.name.monkey.retromusic.helper.MusicPlayerRemote
 import code.name.monkey.retromusic.helper.menu.PlaylistMenuHelper
 import code.name.monkey.retromusic.model.Song
+import code.name.monkey.retromusic.spotify.LibrespotEngine
+import code.name.monkey.retromusic.spotify.SpotifyPlaylistInfo
 import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.PreferenceUtil
 import code.name.monkey.retromusic.util.ThemedFastScroller
@@ -42,6 +46,7 @@ import com.h6ah4i.android.widget.advrecyclerview.draggable.RecyclerViewDragDropM
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import org.koin.android.ext.android.inject
 import org.koin.androidx.viewmodel.ext.android.viewModel
 import org.koin.core.parameter.parametersOf
 
@@ -51,6 +56,8 @@ class PlaylistDetailsFragment : AbsMainActivityFragment(R.layout.fragment_playli
     private val viewModel by viewModel<PlaylistDetailsViewModel> {
         parametersOf(arguments.extraPlaylistId)
     }
+
+    private val librespotEngine: LibrespotEngine by inject()
 
     private var _binding: FragmentPlaylistDetailNewBinding? = null
     private val binding get() = _binding!!
@@ -83,10 +90,11 @@ class PlaylistDetailsFragment : AbsMainActivityFragment(R.layout.fragment_playli
         setUpRecyclerView()
         setUpSearch()
         setupButtons()
+        setUpSaveTracksToggle()
         viewModel.getPlaylist().observe(viewLifecycleOwner) { playlistWithSongs ->
             playlist = playlistWithSongs
             Glide.with(this)
-                .load(PlaylistPreview(playlistWithSongs))
+                .load(RetroGlideExtension.getPlaylistModel(playlistWithSongs))
                 .playlistOptions()
                 .into(binding.image)
             binding.title.text = playlist.playlistEntity.playlistName
@@ -120,6 +128,23 @@ class PlaylistDetailsFragment : AbsMainActivityFragment(R.layout.fragment_playli
                 MusicPlayerRemote.openAndShuffleQueue(playlistSongAdapter.dataSet, true)
             }
             elevatedAccentColor()
+        }
+    }
+
+    /** Spotify mode only: the global "save tracks as they play" toggle (bridge §5.6). */
+    private fun setUpSaveTracksToggle() {
+        val checkbox = binding.saveTracksCheckbox
+        checkbox.isVisible = PreferenceUtil.isSpotifyMode
+        if (!checkbox.isVisible) return
+        checkbox.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked != librespotEngine.oggDumpEnabled.value) {
+                librespotEngine.setOggDumpEnabled(isChecked)
+            }
+        }
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                librespotEngine.oggDumpEnabled.collect { checkbox.isChecked = it }
+            }
         }
     }
 
@@ -181,6 +206,10 @@ class PlaylistDetailsFragment : AbsMainActivityFragment(R.layout.fragment_playli
 
     override fun onCreateMenu(menu: Menu, inflater: MenuInflater) {
         inflater.inflate(R.menu.menu_playlist_detail, menu)
+        menu.findItem(R.id.action_favorite_playlist)?.isChecked =
+            PreferenceUtil.isFavoritePlaylist(arguments.extraPlaylistId)
+        menu.findItem(R.id.action_save_offline_m3u)?.isVisible =
+            SpotifyPlaylistInfo.isSpotifyPlaylist(arguments.extraPlaylistId)
     }
 
     override fun onMenuItemSelected(item: MenuItem): Boolean {

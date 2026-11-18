@@ -14,7 +14,6 @@
  */
 package code.name.monkey.retromusic.activities.base
 
-import android.content.Context
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -27,7 +26,6 @@ import code.name.monkey.appthemehelper.util.VersionUtils
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.extensions.exitFullscreen
 import code.name.monkey.retromusic.extensions.hideStatusBar
-import code.name.monkey.retromusic.extensions.installSplitCompat
 import code.name.monkey.retromusic.extensions.maybeSetScreenOn
 import code.name.monkey.retromusic.extensions.maybeShowWhenLocked
 import code.name.monkey.retromusic.extensions.setEdgeToEdgeOrImmersive
@@ -108,10 +106,5 @@ abstract class AbsThemeActivity : ATHToolbarActivity(), Runnable {
             handler.postDelayed(this, 500)
         }
         return super.onKeyDown(keyCode, event)
-    }
-
-    override fun attachBaseContext(newBase: Context?) {
-        super.attachBaseContext(newBase)
-        installSplitCompat()
     }
 }

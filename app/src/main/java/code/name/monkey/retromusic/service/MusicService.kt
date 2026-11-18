@@ -60,10 +60,14 @@ import code.name.monkey.appthemehelper.util.VersionUtils
 import code.name.monkey.retromusic.ALBUM_ART_ON_LOCK_SCREEN
 import code.name.monkey.retromusic.BLURRED_ALBUM_ART
 import code.name.monkey.retromusic.BuildConfig
+import code.name.monkey.retromusic.cast.MediaRouteController
+import code.name.monkey.retromusic.cast.RemotePlaybackFactory
 import code.name.monkey.retromusic.CROSS_FADE_DURATION
+import code.name.monkey.retromusic.REPLAY_GAIN
 import code.name.monkey.retromusic.PLAYBACK_PITCH
 import code.name.monkey.retromusic.PLAYBACK_SPEED
 import code.name.monkey.retromusic.R
+import code.name.monkey.retromusic.SPOTIFY_MODE
 import code.name.monkey.retromusic.TOGGLE_HEADSET
 import code.name.monkey.retromusic.activities.LockScreenActivity
 import code.name.monkey.retromusic.appwidgets.AppWidgetBig
@@ -91,9 +95,14 @@ import code.name.monkey.retromusic.providers.SongPlayCountStore
 import code.name.monkey.retromusic.service.notification.PlayingNotification
 import code.name.monkey.retromusic.service.playback.Playback
 import code.name.monkey.retromusic.service.playback.Playback.PlaybackCallbacks
+import code.name.monkey.retromusic.spotify.LibrespotEngine
+import code.name.monkey.retromusic.spotify.SpotifyLibrarySync
+import code.name.monkey.retromusic.spotify.SpotifyQueueBridge
+import code.name.monkey.retromusic.repository.SpotifyRepository
 import code.name.monkey.retromusic.util.MusicUtil
 import code.name.monkey.retromusic.util.MusicUtil.toggleFavorite
 import code.name.monkey.retromusic.util.PackageValidator
+import code.name.monkey.retromusic.util.PreferenceUtil
 import code.name.monkey.retromusic.util.PreferenceUtil.crossFadeDuration
 import code.name.monkey.retromusic.util.PreferenceUtil.isAlbumArtOnLockScreen
 import code.name.monkey.retromusic.util.PreferenceUtil.isBluetoothSpeaker
@@ -129,7 +138,8 @@ import java.util.Random
  * @author Karim Abou Zeid (kabouzeid), Andrew Neal. Modified by Prathamesh More
  */
 class MusicService : MediaBrowserServiceCompat(),
-    OnSharedPreferenceChangeListener, PlaybackCallbacks, OnAudioVolumeChangedListener {
+    OnSharedPreferenceChangeListener, PlaybackCallbacks, OnAudioVolumeChangedListener,
+    SpotifyQueueBridge.Host {
     private val musicBind: IBinder = MusicBinder()
 
     @JvmField
@@ -203,6 +213,10 @@ class MusicService : MediaBrowserServiceCompat(),
     private var audioDeviceCallback: AudioDeviceCallback? = null
     private var headsetReceiverRegistered = false
     private var mediaSession: MediaSessionCompat? = null
+    private var mediaRouteController: MediaRouteController? = null
+
+    /** Non-null only in Spotify mode, where librespot owns the queue and this mirrors it. */
+    private var spotifyBridge: SpotifyQueueBridge? = null
     private lateinit var mediaStoreObserver: ContentObserver
     private var musicPlayerHandlerThread: HandlerThread? = null
     private var notHandledMetaChangedForCurrentTrack = false
@@ -317,6 +331,13 @@ class MusicService : MediaBrowserServiceCompat(),
         playbackManager = PlaybackManager(this)
         playbackManager.setCallbacks(this)
         setupMediaSession()
+        mediaRouteController = MediaRouteController(
+            this,
+            mediaSession!!,
+            get(RemotePlaybackFactory::class.java),
+            onRemotePlayback = ::switchToRemotePlayback,
+            onLocalPlayback = ::switchToLocalPlayback,
+        ).also { it.start() }
 
         uiThreadHandler = Handler(Looper.getMainLooper())
         LocalBroadcastManager.getInstance(this).registerReceiver(
@@ -359,6 +380,9 @@ class MusicService : MediaBrowserServiceCompat(),
         mPackageValidator = PackageValidator(this, R.xml.allowed_media_browser_callers)
         mMusicProvider.setMusicService(this)
         storage = PersistentStorage.getInstance(this)
+        if (PreferenceUtil.isSpotifyMode) {
+            startSpotifyBridge()
+        }
     }
 
     override fun onDestroy() {
@@ -376,6 +400,10 @@ class MusicService : MediaBrowserServiceCompat(),
         if (audioDeviceCallback != null) {
             getSystemService<AudioManager>()?.unregisterAudioDeviceCallback(audioDeviceCallback!!)
         }
+        mediaRouteController?.stop()
+        mediaRouteController = null
+        spotifyBridge?.stop()
+        spotifyBridge = null
         mediaSession?.isActive = false
         quit()
         releaseResources()
@@ -386,6 +414,7 @@ class MusicService : MediaBrowserServiceCompat(),
         unregisterOnSharedPreferenceChangedListener(this)
         wakeLock?.release()
         sendBroadcast(Intent("$RETRO_MUSIC_PACKAGE_NAME.RETRO_MUSIC_SERVICE_DESTROYED"))
+        super.onDestroy()
     }
 
     private fun acquireWakeLock() {
@@ -406,24 +435,28 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     fun addSong(position: Int, song: Song) {
+        spotifyBridge?.let { it.insertAt(position, listOf(song)); return }
         playingQueue.add(position, song)
         originalPlayingQueue.add(position, song)
         notifyChange(QUEUE_CHANGED)
     }
 
     fun addSong(song: Song) {
+        spotifyBridge?.let { it.enqueue(listOf(song)); return }
         playingQueue.add(song)
         originalPlayingQueue.add(song)
         notifyChange(QUEUE_CHANGED)
     }
 
     fun addSongs(position: Int, songs: List<Song>?) {
+        spotifyBridge?.let { it.insertAt(position, songs.orEmpty()); return }
         playingQueue.addAll(position, songs!!)
         originalPlayingQueue.addAll(position, songs)
         notifyChange(QUEUE_CHANGED)
     }
 
     fun addSongs(songs: List<Song>?) {
+        spotifyBridge?.let { it.enqueue(songs.orEmpty()); return }
         playingQueue.addAll(songs!!)
         originalPlayingQueue.addAll(songs)
         notifyChange(QUEUE_CHANGED)
@@ -438,6 +471,7 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     fun clearQueue() {
+        spotifyBridge?.let { it.clear(); return }
         playingQueue.clear()
         originalPlayingQueue.clear()
         setPosition(-1)
@@ -445,11 +479,13 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     fun cycleRepeatMode() {
-        repeatMode = when (repeatMode) {
+        val next = when (repeatMode) {
             REPEAT_MODE_NONE -> REPEAT_MODE_ALL
             REPEAT_MODE_ALL -> REPEAT_MODE_THIS
             else -> REPEAT_MODE_NONE
         }
+        spotifyBridge?.let { it.setRepeatMode(next); return }
+        repeatMode = next
     }
 
     val audioSessionId: Int
@@ -542,6 +578,7 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     fun setShuffleMode(shuffleMode: Int) {
+        spotifyBridge?.let { it.setShuffle(shuffleMode == SHUFFLE_MODE_SHUFFLE); return }
         PreferenceManager.getDefaultSharedPreferences(this).edit {
             putInt(SAVED_SHUFFLE_MODE, shuffleMode)
         }
@@ -600,6 +637,14 @@ class MusicService : MediaBrowserServiceCompat(),
 
     fun moveSong(from: Int, to: Int) {
         if (from == to) {
+            return
+        }
+        spotifyBridge?.let {
+            // Only upcoming user-queued tracks can be moved; otherwise snap the UI back.
+            if (!it.move(from, to)) {
+                runOnUiThread { showToast(R.string.spotify_queue_reorder_unsupported) }
+                it.requestRefresh()
+            }
             return
         }
         val currentPosition = getPosition()
@@ -680,6 +725,8 @@ class MusicService : MediaBrowserServiceCompat(),
                 playbackManager.setPlaybackSpeedPitch(playbackSpeed, playbackPitch)
             }
 
+            REPLAY_GAIN -> playbackManager.applyReplayGain(currentSong)
+
             CROSS_FADE_DURATION -> {
                 val progress = songProgressMillis
                 val wasPlaying = isPlaying
@@ -694,6 +741,8 @@ class MusicService : MediaBrowserServiceCompat(),
             ALBUM_ART_ON_LOCK_SCREEN, BLURRED_ALBUM_ART -> updateMediaSessionMetaData(::updateMediaSessionPlaybackState)
 
             TOGGLE_HEADSET -> registerHeadsetEvents()
+
+            SPOTIFY_MODE -> onLibrarySourceChanged()
         }
     }
 
@@ -783,6 +832,10 @@ class MusicService : MediaBrowserServiceCompat(),
         startPosition: Int,
         startPlaying: Boolean,
     ) {
+        spotifyBridge?.let {
+            if (!playingQueue.isNullOrEmpty()) it.openQueue(playingQueue, startPosition, startPlaying)
+            return
+        }
         if (!playingQueue.isNullOrEmpty()
             && startPosition >= 0 && startPosition < playingQueue.size
         ) {
@@ -833,16 +886,19 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     fun playNextSong(force: Boolean) {
+        spotifyBridge?.let { it.next(); return }
         playSongAt(getNextPosition(force))
     }
 
     fun playPreviousSong(force: Boolean) {
+        spotifyBridge?.let { it.previous(); return }
         playSongAt(getPreviousPosition(force))
     }
 
     fun playSongAt(position: Int) {
-        // Every chromecast method needs to run on main thread or you are greeted with IllegalStateException
-        // So it will use Main dispatcher
+        spotifyBridge?.let { it.playAt(position); return }
+        // Remote playback implementations usually need to be driven from the main thread,
+        // so remote playback uses the Main dispatcher
         // And by using Default dispatcher for local playback we are reduce the burden of main thread
         serviceScope.launch(if (playbackManager.isLocalPlayback) Default else Main) {
             openTrackAndPrepareNextAt(position) { success ->
@@ -861,7 +917,9 @@ class MusicService : MediaBrowserServiceCompat(),
     fun prepareNextImpl() {
         try {
             val nextPosition = getNextPosition(false)
-            playbackManager.setNextDataSource(getSongAt(nextPosition).uri)
+            val next = getSongAt(nextPosition)
+            playbackManager.setNextDataSource(next.uri)
+            playbackManager.prefetchReplayGain(next)
             this.nextPosition = nextPosition
         } catch (ignored: Exception) {
         }
@@ -903,6 +961,10 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     fun removeSong(position: Int) {
+        spotifyBridge?.let { bridge ->
+            playingQueue.getOrNull(position)?.let { bridge.remove(listOf(it)) }
+            return
+        }
         if (getShuffleMode() == SHUFFLE_MODE_NONE) {
             playingQueue.removeAt(position)
             originalPlayingQueue.removeAt(position)
@@ -928,11 +990,13 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     fun removeSong(song: Song) {
+        spotifyBridge?.let { it.remove(listOf(song)); return }
         removeSongImpl(song)
         notifyChange(QUEUE_CHANGED)
     }
 
     fun removeSongs(songs: List<Song>) {
+        spotifyBridge?.let { it.remove(songs); return }
         for (song in songs) {
             while (playingQueue.contains(song) || originalPlayingQueue.contains(song)) {
                 removeSongImpl(song)
@@ -955,6 +1019,11 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     private suspend fun restoreQueuesAndPositionIfNecessary() {
+        // In Spotify mode the queue lives in librespot; the bridge mirrors it in.
+        if (spotifyBridge != null) {
+            queuesRestored = true
+            return
+        }
         if (!queuesRestored && playingQueue.isEmpty()) {
             withContext(IO) {
                 val restoredQueue =
@@ -1247,8 +1316,8 @@ class MusicService : MediaBrowserServiceCompat(),
         playbackManager.switchToLocalPlayback(this::restorePlaybackState)
     }
 
-    fun switchToRemotePlayback(castPlayer: CastPlayer) {
-        playbackManager.switchToRemotePlayback(castPlayer, this::restorePlaybackState)
+    fun switchToRemotePlayback(remotePlayback: Playback) {
+        playbackManager.switchToRemotePlayback(remotePlayback, this::restorePlaybackState)
     }
 
     private fun restorePlaybackState(wasPlaying: Boolean, progress: Int) {
@@ -1373,6 +1442,8 @@ class MusicService : MediaBrowserServiceCompat(),
     }
 
     private fun saveQueues() {
+        // Never persist the mirrored Spotify queue over the saved local queue.
+        if (spotifyBridge != null) return
         serviceScope.launch(IO) {
             MusicPlaybackQueueStore.getInstance(this@MusicService)
                 .saveQueues(playingQueue, originalPlayingQueue)
@@ -1435,6 +1506,83 @@ class MusicService : MediaBrowserServiceCompat(),
         mediaSession?.setCallback(mediaSessionCallback)
         mediaSession?.isActive = true
         mediaSession?.setMediaButtonReceiver(mediaButtonReceiverPendingIntent)
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Spotify mode
+    // -------------------------------------------------------------------------------------------
+
+    private fun startSpotifyBridge() {
+        if (spotifyBridge == null) {
+            spotifyBridge = SpotifyQueueBridge(
+                get(LibrespotEngine::class.java),
+                get(SpotifyRepository::class.java),
+                get(SpotifyLibrarySync::class.java),
+                this
+            )
+        }
+        spotifyBridge?.start()
+    }
+
+    /** Switches between the local library and Spotify when the setting changes. */
+    private fun onLibrarySourceChanged() {
+        val toSpotify = PreferenceUtil.isSpotifyMode
+        if (toSpotify == (spotifyBridge != null)) return
+        pause(true)
+        spotifyBridge?.stop()
+        spotifyBridge = null
+        if (!toSpotify) {
+            serviceScope.launch { get<LibrespotEngine>(LibrespotEngine::class.java).stop() }
+        }
+        playingQueue = ArrayList()
+        originalPlayingQueue = ArrayList()
+        position = -1
+        playbackManager.resetLocalPlayback(this)
+        if (toSpotify) {
+            startSpotifyBridge()
+            notifyChange(QUEUE_CHANGED)
+            notifyChange(META_CHANGED)
+        } else {
+            // Bring back the saved local queue; it was never overwritten in Spotify mode.
+            queuesRestored = false
+            serviceScope.launch { restoreQueuesAndPositionIfNecessary() }
+        }
+    }
+
+    override val currentQueue: List<Song> get() = playingQueue
+
+    override val currentPosition: Int get() = position
+
+    override val currentShuffleMode: Int get() = shuffleMode
+
+    override fun onSpotifyQueue(queue: List<Song>, position: Int, trackChanged: Boolean) {
+        playingQueue = ArrayList(queue)
+        originalPlayingQueue = ArrayList(queue)
+        this.position = position
+        if (trackChanged) {
+            notifyChange(META_CHANGED)
+        }
+        notifyChange(QUEUE_CHANGED)
+    }
+
+    override fun onSpotifyPlayStateChanged() {
+        notifyChange(PLAY_STATE_CHANGED)
+    }
+
+    override fun onSpotifySeek() {
+        updateMediaSessionPlaybackState()
+        sendChangeInternal(PLAY_STATE_CHANGED)
+    }
+
+    override fun onSpotifyModesChanged(shuffleMode: Int, repeatMode: Int) {
+        if (this.shuffleMode != shuffleMode) {
+            this.shuffleMode = shuffleMode
+            handleAndSendChangeInternal(SHUFFLE_MODE_CHANGED)
+        }
+        if (this.repeatMode != repeatMode) {
+            this.repeatMode = repeatMode
+        }
+        updateMediaSessionPlaybackState()
     }
 
     inner class MusicBinder : Binder() {

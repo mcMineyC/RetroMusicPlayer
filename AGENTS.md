@@ -8,10 +8,9 @@ Guidance for coding agents working in this repository.
 - Work from the repository root and use the checked-in Gradle wrapper.
 - Main modules are `:app` and `:appthemehelper`.
 - App code lives under `app/src/main/java/code/name/monkey/retromusic`.
-- Product flavors matter:
-  - `normal` contains Play Billing, Cast, and Play-only behavior.
-  - `fdroid` contains stubs or alternative implementations for store-free builds.
-- Keep flavor-specific code in `app/src/normal` or `app/src/fdroid`; do not reference normal-only classes from `main`.
+- There are no product flavors; all app code and resources live in `app/src/main`. Do not add Google Play-only dependencies (Play Services, Cast SDK, Billing, Play Core).
+- Spotify mode lives in `app/src/main/java/code/name/monkey/retromusic/spotify`: `LibrespotEngine` wraps the gomobile `mobilebind.Librespot` from `app/libs/librespot.aar` (source: `embedded-librespot/go-librespot`, `mobilebind/`), `SpotifyRepository` serves cached Spotify tracks as Retro `Song`s (`Song.data` is the `spotify:track:` URI), and librespot owns the play queue while `MusicService` mirrors it.
+- Remote playback uses AndroidX MediaRouter: `cast/MediaRouteController` (owned by `MusicService`) handles the Cast button and the system output switcher, and a `RemotePlaybackFactory` registered in `MainModule.kt` supplies the remote `Playback`.
 
 ## Build And Verification
 
@@ -20,14 +19,13 @@ Guidance for coding agents working in this repository.
   - `./gradlew lint`
   - `./gradlew app:assemble`
 - For a faster local loop, use focused module tasks such as:
-  - `./gradlew :app:assembleNormalDebug`
-  - `./gradlew :app:assembleFdroidDebug`
+  - `./gradlew :app:assembleDebug`
 - CI currently validates wrapper integrity, `./gradlew lint`, and `./gradlew app:assemble`.
 - There is no substantial test suite in this checkout right now; do not invent broad test scaffolding for a narrow fix unless the change needs it.
 
 ## Architecture Rules
 
-- `App.kt` owns app startup, Koin startup, billing, crash handling, shortcuts, wallpaper accent setup, and default preferences.
+- `App.kt` owns app startup, Koin startup, crash handling, shortcuts, wallpaper accent setup, and default preferences.
 - `MainModule.kt` is the dependency injection map. Add new repositories, services, and ViewModels there instead of constructing them ad hoc in UI code.
 - `Repository` and `RealRepository` are the app-level data facade. Prefer repository/ViewModel changes over direct data access from fragments or adapters.
 - Room state is in `RetroDatabase` and related DAOs/entities under `db/`. If a schema changes, add a real migration and wire it into `Room.databaseBuilder(...).addMigrations(...)`.
@@ -46,12 +44,12 @@ Guidance for coding agents working in this repository.
 
 ## Playback, Artwork, And Performance
 
-- Treat `MusicPlayerRemote`, `service/`, player fragments, widgets, Android Auto, notifications, and Cast as hot paths.
+- Treat `MusicPlayerRemote`, `service/`, player fragments, widgets, Android Auto, notifications, and remote playback as hot paths.
 - Do not block playback or service callbacks with disk, network, MediaStore, Room, or artwork work.
 - Use the existing Glide integration and `RetroGlideExtension` patterns for album art, artist art, palettes, widgets, and notifications.
 - Clear or replace long-lived Glide targets when updating widgets/notifications to avoid leaking stale targets.
 - Be cautious with large libraries: avoid repeated full-list sorting/filtering on the main thread and avoid decoding large artwork directly in render paths.
-- Do not add music downloading or streaming behavior; the app is a local music player.
+- The app plays local files, and in Spotify mode streams through the bundled go-librespot binding (`spotify/`). Do not add other downloading or streaming sources.
 
 ## Dependencies And Generated Files
 

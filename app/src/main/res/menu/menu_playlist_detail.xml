@@ -6,6 +6,14 @@
         android:visible="false"
         app:showAsAction="ifRoom" />
     <item
+        android:id="@+id/action_favorite_playlist"
+        android:checkable="true"
+        android:title="@string/action_favorite_playlist" />
+    <item
+        android:id="@+id/action_save_offline_m3u"
+        android:title="@string/action_save_offline_m3u"
+        android:visible="false" />
+    <item
         android:id="@+id/action_play"
         android:title="@string/action_play"
         app:showAsAction="never" />

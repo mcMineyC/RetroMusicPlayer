@@ -94,7 +94,6 @@ favorite songs. No other music player has this feature.
 
 ## 📦 Included Features
 -  Base 3 themes (Clearly White, Kinda Dark and Just Black)
--  Chromecast support
 -  Choose from 10+ now playing themes
 -  Driving Mode
 -  Headset/Bluetooth support

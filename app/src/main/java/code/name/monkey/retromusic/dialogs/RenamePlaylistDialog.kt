@@ -26,7 +26,6 @@ import code.name.monkey.retromusic.extensions.colorButtons
 import code.name.monkey.retromusic.extensions.extraNotNull
 import code.name.monkey.retromusic.extensions.materialDialog
 import code.name.monkey.retromusic.fragments.LibraryViewModel
-import code.name.monkey.retromusic.fragments.ReloadType
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
 import org.koin.androidx.viewmodel.ext.android.activityViewModel
@@ -58,8 +57,7 @@ class RenamePlaylistDialog : DialogFragment() {
             .setPositiveButton(R.string.action_rename) { _, _ ->
                 val name = inputEditText.text.toString()
                 if (name.isNotEmpty()) {
-                    libraryViewModel.renameRoomPlaylist(playlistEntity.playListId, name)
-                    libraryViewModel.forceReload(ReloadType.Playlists)
+                    libraryViewModel.renamePlaylist(requireContext(), playlistEntity.playListId, name)
                 } else {
                     nameContainer.error = "Playlist name should'nt be empty"
                 }

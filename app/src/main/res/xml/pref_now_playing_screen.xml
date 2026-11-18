@@ -17,6 +17,13 @@
 
     <code.name.monkey.appthemehelper.common.prefs.supportv7.ATESwitchPreference
         android:defaultValue="false"
+        android:key="squiggly_progress"
+        android:layout="@layout/list_item_view_switch"
+        android:summary="@string/pref_summary_squiggly_progress"
+        android:title="@string/pref_title_squiggly_progress" />
+
+    <code.name.monkey.appthemehelper.common.prefs.supportv7.ATESwitchPreference
+        android:defaultValue="false"
         android:key="snowfall"
         android:layout="@layout/list_item_view_switch_no_title"
         android:title="@string/pref_snow_fall_title" />

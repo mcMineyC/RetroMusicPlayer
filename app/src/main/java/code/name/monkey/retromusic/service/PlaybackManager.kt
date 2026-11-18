@@ -6,12 +6,22 @@ import android.media.audiofx.AudioEffect
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Looper
 import code.name.monkey.appthemehelper.util.VersionUtils
 import code.name.monkey.retromusic.R
 import code.name.monkey.retromusic.extensions.showToast
 import code.name.monkey.retromusic.model.Song
 import code.name.monkey.retromusic.service.playback.Playback
+import code.name.monkey.retromusic.spotify.LibrespotEngine
+import code.name.monkey.retromusic.spotify.LibrespotPlayback
 import code.name.monkey.retromusic.util.PreferenceUtil
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.java.KoinJavaComponent
 
 
 class PlaybackManager(val context: Context) {
@@ -40,6 +50,10 @@ class PlaybackManager(val context: Context) {
         get() = playback != null && playback!!.isPlaying
 
     private val audioManager: AudioManager = context.getSystemService(AudioManager::class.java)
+
+    /** Reads ReplayGain tags off the playback path; see [applyReplayGain]. */
+    private val replayGainScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var replayGainJob: Job? = null
 
     init {
         playback = createLocalPlayback()
@@ -98,6 +112,34 @@ class PlaybackManager(val context: Context) {
         completion: (success: Boolean) -> Unit,
     ) {
         playback?.setDataSource(song, force, completion)
+        applyReplayGain(song)
+    }
+
+    /**
+     * Applies [song]'s ReplayGain. Uses the cached value when there is one; otherwise, off the
+     * main thread (the usual case: the service opens local tracks on a background dispatcher)
+     * it reads the tags before playback starts, and on the main thread it reads them in the
+     * background and applies the result as soon as it is ready.
+     */
+    fun applyReplayGain(song: Song) {
+        replayGainJob?.cancel()
+        val cached = ReplayGain.cachedFactor(song)
+        when {
+            cached != null -> playback?.setReplayGain(cached)
+            Looper.myLooper() != Looper.getMainLooper() ->
+                playback?.setReplayGain(ReplayGain.loadFactor(song))
+
+            else -> replayGainJob = replayGainScope.launch {
+                val factor = ReplayGain.loadFactor(song)
+                withContext(Dispatchers.Main) { playback?.setReplayGain(factor) }
+            }
+        }
+    }
+
+    /** Reads [song]'s ReplayGain ahead of time so the switch to it (or a crossfade) has it ready. */
+    fun prefetchReplayGain(song: Song?) {
+        if (song == null || ReplayGain.cachedFactor(song) != null) return
+        replayGainScope.launch { ReplayGain.loadFactor(song) }
     }
 
     fun setNextDataSource(trackUri: Uri?) {
@@ -113,6 +155,8 @@ class PlaybackManager(val context: Context) {
      * @return Whether switched playback
      */
     fun maybeSwitchToCrossFade(crossFadeDuration: Int): Boolean {
+        // librespot produces its own audio; crossfade does not apply in Spotify mode.
+        if (playback is LibrespotPlayback) return false
         /* Switch to RetroExoPlayer if CrossFade duration is 0 and
                 Playback is not an instance of RetroExoPlayer */
         if (playback !is RetroExoPlayer && crossFadeDuration == 0) {
@@ -134,12 +178,15 @@ class PlaybackManager(val context: Context) {
     }
 
     fun release() {
+        replayGainJob?.cancel()
         playback?.release()
         playback = null
         closeAudioEffectSession()
     }
 
     private fun openAudioEffectSession() {
+        // Session 0 is the global output mix; never hand that to an equalizer app.
+        if (audioSessionId == 0) return
         val intent = Intent(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION)
         intent.putExtra(AudioEffect.EXTRA_AUDIO_SESSION, audioSessionId)
         intent.putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
@@ -148,6 +195,7 @@ class PlaybackManager(val context: Context) {
     }
 
     private fun closeAudioEffectSession() {
+        if (audioSessionId == 0) return
         val audioEffectsIntent = Intent(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION)
         if (playback != null) {
             audioEffectsIntent.putExtra(AudioEffect.EXTRA_AUDIO_SESSION,
@@ -163,11 +211,11 @@ class PlaybackManager(val context: Context) {
     }
 
     fun switchToRemotePlayback(
-        castPlayer: CastPlayer,
+        remotePlayback: Playback,
         onChange: (wasPlaying: Boolean, progress: Int) -> Unit,
     ) {
         playbackLocation = PlaybackLocation.REMOTE
-        switchToPlayback(castPlayer, onChange)
+        switchToPlayback(remotePlayback, onChange)
     }
 
     private fun switchToPlayback(
@@ -182,7 +230,18 @@ class PlaybackManager(val context: Context) {
         onChange(wasPlaying, progress)
     }
 
+    /** Re-creates the on-device playback, e.g. after switching between Local and Spotify mode. */
+    fun resetLocalPlayback(callbacks: Playback.PlaybackCallbacks) {
+        playback?.release()
+        playbackLocation = PlaybackLocation.LOCAL
+        playback = createLocalPlayback()
+        playback?.callbacks = callbacks
+    }
+
     private fun createLocalPlayback(): Playback {
+        if (PreferenceUtil.isSpotifyMode) {
+            return LibrespotPlayback(context, KoinJavaComponent.get(LibrespotEngine::class.java))
+        }
         // Set RetroExoPlayer when crossfade duration is 0 i.e. off
         return if (PreferenceUtil.crossFadeDuration == 0) {
             RetroExoPlayer(context)

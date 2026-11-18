@@ -19,6 +19,13 @@
         android:icon="@drawable/ic_playlist_add"
         android:title="@string/action_add_to_playlist"
         app:showAsAction="ifRoom" />
+    <!-- Shown only in Spotify mode; see Menu.setUpLikedSongsAction(). -->
+    <item
+        android:id="@+id/action_add_to_liked_songs"
+        android:icon="@drawable/ic_favorite"
+        android:title="@string/action_add_to_liked_songs"
+        android:visible="false"
+        app:showAsAction="never" />
     <item
         android:id="@id/action_multi_select_adapter_check_all"
         android:icon="@drawable/ic_select_all"

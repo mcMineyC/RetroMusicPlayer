@@ -56,6 +56,12 @@ interface Playback {
 
     fun setPlaybackSpeedPitch(speed: Float, pitch: Float)
 
+    /**
+     * Linear ReplayGain factor (0..1) for the current song, multiplied into every volume this
+     * playback sets (fades, ducking). Players that do their own loudness handling ignore it.
+     */
+    fun setReplayGain(factor: Float) {}
+
     interface PlaybackCallbacks {
         fun onTrackWentToNext()
 
